@@ -1,0 +1,70 @@
+@model Campaign
+@{ Layout = null; ViewData["Title"] = Model.Name; }
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@Model.Name</title>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;700;800&display=swap" rel="stylesheet" />
+    <style>
+        * { box-sizing:border-box; }
+        body { margin:0; font-family:"Be Vietnam Pro",sans-serif; background:linear-gradient(160deg,#db2777,#7c1d54 70%); color:#fff; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+        .card { background:#fff; color:#333; width:100%; max-width:400px; border-radius:22px; padding:26px 24px; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+        .badge-live { background:#16a34a; color:#fff; font-size:11px; padding:3px 10px; border-radius:20px; font-weight:700; }
+        .badge-off { background:#9ca3af; color:#fff; font-size:11px; padding:3px 10px; border-radius:20px; font-weight:700; }
+        h1 { font-size:22px; margin:12px 0 4px; }
+        .desc { color:#6b7280; font-size:13px; margin-bottom:16px; }
+        .prizes { background:#fdf2f8; border-radius:14px; padding:12px 14px; margin-bottom:18px; }
+        .prizes .row { display:flex; justify-content:space-between; font-size:13px; padding:3px 0; }
+        input { width:100%; padding:11px 13px; border:1px solid #e5e7eb; border-radius:11px; font-size:15px; margin-bottom:10px; font-family:inherit; }
+        button { width:100%; padding:13px; border:none; border-radius:12px; background:#db2777; color:#fff; font-size:16px; font-weight:700; cursor:pointer; font-family:inherit; }
+        button:disabled { background:#f9a8d4; }
+        .result { margin-top:16px; padding:16px; border-radius:14px; text-align:center; font-weight:600; display:none; }
+        .result.win { background:#dcfce7; color:#166534; }
+        .result.lose { background:#f3f4f6; color:#4b5563; }
+        .result.err { background:#fee2e2; color:#991b1b; }
+        .result .big { font-size:20px; font-weight:800; display:block; margin-top:4px; }
+        .foot { text-align:center; font-size:11px; color:#9ca3af; margin-top:16px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        @if (Model.IsLiveNow) { <span class="badge-live">● ĐANG DIỄN RA</span> } else { <span class="badge-off">Chưa mở / đã kết thúc</span> }
+        <h1>@Model.Name</h1>
+        <div class="desc">@Model.Description</div>
+        <div class="prizes">
+            <div style="font-weight:700;font-size:12px;text-transform:uppercase;color:#db2777;margin-bottom:4px">Cơ cấu giải</div>
+            @foreach (var p in Model.Prizes)
+            {
+                <div class="row"><span>@p.Tier @p.Name</span><span>@(p.Remaining > 0 ? "còn " + p.Remaining : "hết")</span></div>
+            }
+        </div>
+        <div id="form">
+            <input id="code" placeholder="Nhập mã dự thưởng trên tem" @(Model.IsLiveNow ? "" : "disabled") />
+            <input id="name" placeholder="Họ tên (tùy chọn)" @(Model.IsLiveNow ? "" : "disabled") />
+            <input id="phone" placeholder="Số điện thoại (tùy chọn)" @(Model.IsLiveNow ? "" : "disabled") />
+            <button id="spin" onclick="play()" @(Model.IsLiveNow ? "" : "disabled")>🎁 QUAY NGAY</button>
+        </div>
+        <div id="result" class="result"></div>
+        <div class="foot">MiniPromo · mã CD: @Model.Code</div>
+    </div>
+    <script>
+        const CODE = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Code));
+        async function play() {
+            const btn = document.getElementById('spin'), rs = document.getElementById('result');
+            const code = document.getElementById('code').value.trim();
+            if (!code) { show('err','Vui lòng nhập mã dự thưởng.'); return; }
+            btn.disabled = true; btn.textContent = 'Đang quay...';
+            try {
+                const r = await fetch('/api/play', { method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({ campaignCode: CODE, code, name: document.getElementById('name').value, phone: document.getElementById('phone').value }) });
+                const d = await r.json();
+                if (!d.ok) { show('err', d.msg); btn.disabled=false; btn.textContent='🎁 QUAY NGAY'; return; }
+                if (d.win) { show('win', d.msg + '<span class="big">🎉 ' + d.prize + '</span>'); document.getElementById('form').style.display='none'; }
+                else { show('lose', d.msg); btn.disabled=false; btn.textContent='🎁 QUAY NGAY'; }
+            } catch(e) { show('err','Có lỗi, thử lại.'); btn.disabled=false; btn.textContent='🎁 QUAY NGAY'; }
+        }
+        function show(cls, html) { const rs=document.getElementById('result'); rs.className='result '+cls; rs.innerHTML=html; rs.style.display='block'; }
+    </script>
+</body>
+</html>

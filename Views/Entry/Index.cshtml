@@ -1,0 +1,38 @@
+@model List<Entry>
+@{ ViewData["Title"] = "Lượt quay & giải"; var camps = (List<Campaign>)ViewBag.Campaigns; var cid = (int?)ViewBag.CampaignId; var res = (PlayResult?)ViewBag.Result; }
+<div class="card"><div class="card-body">
+    <form method="get" class="d-flex gap-2 mb-3 flex-wrap">
+        <select name="campaignId" class="form-select form-select-sm" style="max-width:220px" onchange="this.form.submit()">
+            <option value="">— Mọi chiến dịch —</option>
+            @foreach (var c in camps) { <option value="@c.Id" selected="@(cid==c.Id)">@c.Code — @c.Name</option> }
+        </select>
+        <select name="result" class="form-select form-select-sm" style="max-width:150px" onchange="this.form.submit()">
+            <option value="">— Tất cả —</option>
+            <option value="1" selected="@(res==PlayResult.Win)">Chỉ trúng</option>
+            <option value="0" selected="@(res==PlayResult.Lose)">Chỉ trượt</option>
+        </select>
+    </form>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Thời gian</th><th>Chiến dịch</th><th>Mã dự thưởng</th><th>Khách</th><th>Kết quả</th><th>Trao giải</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var e in Model)
+        {
+            <tr>
+                <td class="small text-muted">@e.CreatedAt.ToLocalTime().ToString("dd/MM HH:mm")</td>
+                <td class="small">@e.Campaign?.Code</td>
+                <td class="small fw-semibold">@e.Code</td>
+                <td class="small">@e.CustomerName<div class="text-muted">@e.Phone</div></td>
+                <td>@if (e.Result == PlayResult.Win) { <span class="badge bg-success">Trúng: @e.PrizeName</span> } else { <span class="text-muted small">Trượt</span> }</td>
+                <td>@if (e.Result == PlayResult.Win) { var (ct, ccss) = Ui.Claim(e.Claim); <span class="badge bg-@ccss">@ct</span> }</td>
+                <td class="text-end">
+                    @if (e.Result == PlayResult.Win && e.Claim == ClaimStatus.Pending)
+                    {
+                        <form asp-action="Claim" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@e.Id" /><input type="hidden" name="status" value="2" /><input type="hidden" name="campaignId" value="@cid" /><button class="btn btn-sm btn-success">Đã trao</button></form>
+                    }
+                </td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có lượt quay.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

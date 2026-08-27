@@ -1,0 +1,17 @@
+@model List<Campaign>
+@{ ViewData["Title"] = "Trang quay số"; }
+<div class="card"><div class="card-body">
+    <h6 class="fw-bold mb-3">Chọn chiến dịch để mở trang quay số công khai</h6>
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Mã</th><th>Tên</th><th>Trạng thái</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var c in Model)
+        {
+            var (t, css) = Ui.Camp(c.Status);
+            <tr><td class="fw-semibold small">@c.Code</td><td>@c.Name</td><td><span class="badge bg-@css">@t</span></td>
+                <td class="text-end"><a href="/Play/@c.Code" target="_blank" class="btn btn-sm btn-outline-primary">Mở trang quay <i class="bi bi-box-arrow-up-right ms-1"></i></a></td></tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="4" class="text-center text-muted py-4">Chưa có chiến dịch.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

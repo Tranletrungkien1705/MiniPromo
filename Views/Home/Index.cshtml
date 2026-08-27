@@ -1,0 +1,24 @@
+@{ ViewData["Title"] = "Bảng điều khiển"; var d = (PromoDash)ViewBag.Dash; }
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">Chiến dịch đang chạy</div><div class="stat-num text-success">@d.Running<span class="text-muted" style="font-size:15px">/@d.Campaigns</span></div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">Lượt tham gia</div><div class="stat-num" style="color:#db2777">@d.TotalPlays.ToString("N0")</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">Lượt trúng</div><div class="stat-num">@d.TotalWins.ToString("N0")</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">Giá trị đã trao</div><div class="stat-num" style="font-size:18px">@Ui.Money(d.ValueAwarded)</div></div></div></div>
+</div>
+<div class="card"><div class="card-body">
+    <h6 class="fw-bold mb-3">Chiến dịch</h6>
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Mã</th><th>Tên</th><th class="text-center">Lượt quay</th><th class="text-center">Trúng</th><th class="text-center">Giải còn</th><th class="text-end">Đã trao</th></tr></thead>
+        <tbody>
+        @foreach (var s in d.Top)
+        {
+            <tr style="cursor:pointer" onclick="location.href='/Campaign/Detail/@s.Campaign.Id'">
+                <td class="fw-semibold small">@s.Campaign.Code</td><td>@s.Campaign.Name</td>
+                <td class="text-center">@s.Plays</td><td class="text-center text-success">@s.Wins</td>
+                <td class="text-center">@s.PrizesLeft/@s.PrizesTotal</td><td class="text-end">@Ui.Money(s.ValueAwarded)</td>
+            </tr>
+        }
+        @if (d.Top.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có chiến dịch. <a href="/Campaign">Tạo ngay →</a></td></tr> }
+        </tbody>
+    </table>
+</div></div>

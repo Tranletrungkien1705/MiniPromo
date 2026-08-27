@@ -1,0 +1,57 @@
+@model Campaign
+@{ ViewData["Title"] = Model.Name; var stat = (CampaignStat)ViewBag.Stat; var (t, css) = Ui.Camp(Model.Status);
+   var playUrl = $"{Context.Request.Scheme}://{Context.Request.Host}/Play/{Model.Code}"; }
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card mb-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h5 class="fw-bold mb-1">@Model.Name <span class="badge bg-@css ms-1">@t</span></h5>
+                    <div class="text-muted small">Mã <b>@Model.Code</b> · @Model.FromDate.ToString("dd/MM/yyyy") – @Model.ToDate.ToString("dd/MM/yyyy")</div>
+                    @if (!string.IsNullOrEmpty(Model.Description)) { <div class="small mt-1">@Model.Description</div> }
+                </div>
+                <div class="text-end">
+                    @if (Model.Status == CampaignStatus.Draft) { <form asp-action="SetStatus" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="status" value="1" /><button class="btn btn-sm btn-success">Chạy</button></form> }
+                    else if (Model.Status == CampaignStatus.Running) { <form asp-action="SetStatus" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="status" value="2" /><button class="btn btn-sm btn-outline-dark">Kết thúc</button></form> }
+                </div>
+            </div>
+            <div class="row g-2 text-center mt-2">
+                <div class="col"><div class="text-muted small">Lượt quay</div><div class="fw-bold">@stat.Plays</div></div>
+                <div class="col"><div class="text-muted small">Trúng</div><div class="fw-bold text-success">@stat.Wins</div></div>
+                <div class="col"><div class="text-muted small">Giải còn / tổng</div><div class="fw-bold">@stat.PrizesLeft/@stat.PrizesTotal</div></div>
+                <div class="col"><div class="text-muted small">Đã trao</div><div class="fw-bold" style="color:#db2777">@Ui.Money(stat.ValueAwarded)</div></div>
+            </div>
+        </div></div>
+        <div class="card"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2"><h6 class="fw-bold mb-0">Cơ cấu giải</h6><a href="/Entry?campaignId=@Model.Id" class="small">Xem lượt quay →</a></div>
+            <table class="table table-sm align-middle">
+                <thead><tr><th>Hạng</th><th>Giải</th><th class="text-end">Giá trị</th><th class="text-center">Số suất</th><th class="text-center">Đã phát</th><th class="text-center">Còn</th><th class="text-center">Trọng số</th></tr></thead>
+                <tbody>
+                @foreach (var p in Model.Prizes)
+                {
+                    <tr><td class="small fw-semibold">@p.Tier</td><td>@p.Name</td><td class="text-end">@Ui.Money(p.Value)</td>
+                        <td class="text-center">@p.Quantity</td><td class="text-center">@p.Awarded</td>
+                        <td class="text-center @(p.Remaining==0?"text-danger":"")">@p.Remaining</td><td class="text-center text-muted">@p.Weight</td></tr>
+                }
+                @if (Model.Prizes.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-3">Chưa có giải.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Thêm giải</h6>
+            <form asp-action="AddPrize" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                <div class="row g-2 mb-2"><div class="col-5"><input name="tier" class="form-control form-control-sm" placeholder="Hạng" /></div><div class="col-7"><input name="name" class="form-control form-control-sm" placeholder="Tên giải *" required /></div></div>
+                <div class="mb-2"><input name="value" type="number" step="100000" class="form-control form-control-sm" placeholder="Giá trị (đ)" /></div>
+                <div class="row g-2 mb-3"><div class="col-6"><input name="quantity" type="number" class="form-control form-control-sm" placeholder="Số suất *" required /></div><div class="col-6"><input name="weight" type="number" value="1" class="form-control form-control-sm" placeholder="Trọng số" /></div></div>
+                <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Thêm giải</button>
+            </form>
+        </div></div>
+        <div class="card"><div class="card-body text-center">
+            <h6 class="fw-bold mb-2">Link tham gia</h6>
+            <div class="border rounded p-2 small text-break mb-2">@playUrl</div>
+            <a href="/Play/@Model.Code" target="_blank" class="btn btn-outline-primary btn-sm w-100"><i class="bi bi-box-arrow-up-right me-1"></i>Mở trang quay số</a>
+        </div></div>
+    </div>
+</div>
