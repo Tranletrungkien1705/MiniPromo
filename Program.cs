@@ -66,8 +66,44 @@ app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
     return Results.Ok(new { orgId = org.Id, apiKey = org.ApiKey });
 });
 
+// Import chiến dịch khuyến mãi thật từ HTC (dedupe theo Code) — kèm prizes + entries
+app.MapPost("/api/import/campaigns", async (List<ImportCampaignDto> rows, AppDbContext db, ITenantContext tc) =>
+{
+    if (rows == null || rows.Count == 0) return Results.BadRequest(new { error = "Không có dữ liệu." });
+    int added = 0, skipped = 0;
+    var orgId = tc.OrgId;
+    foreach (var row in rows)
+    {
+        if (string.IsNullOrWhiteSpace(row.Code)) { skipped++; continue; }
+        if (await db.Campaigns.AnyAsync(c => c.OrgId == orgId && c.Code == row.Code.Trim())) { skipped++; continue; }
+        var camp = new Campaign
+        {
+            OrgId = orgId, Code = row.Code.Trim(), Name = row.Name ?? row.Code.Trim(),
+            Description = row.Description,
+            FromDate = row.FromDate ?? DateTime.Today.AddDays(-30),
+            ToDate = row.ToDate ?? DateTime.Today.AddDays(30),
+            Status = (CampaignStatus)(row.Status ?? 0),
+            LoseWeight = row.LoseWeight > 0 ? row.LoseWeight : 70
+        };
+        db.Campaigns.Add(camp);
+        await db.SaveChangesAsync();
+        if (row.Prizes != null)
+            foreach (var p in row.Prizes)
+                db.Prizes.Add(new Prize { OrgId = orgId, CampaignId = camp.Id, Name = p.Name ?? "", Tier = p.Tier ?? "Giải", Value = p.Value, Quantity = p.Quantity > 0 ? p.Quantity : 1, Weight = p.Weight > 0 ? p.Weight : 5 });
+        if (row.Entries != null)
+            foreach (var e in row.Entries)
+                db.Entries.Add(new Entry { OrgId = orgId, CampaignId = camp.Id, Code = e.Code ?? Guid.NewGuid().ToString("N")[..12], CustomerName = e.CustomerName, Phone = e.Phone, Result = e.Win ? PlayResult.Win : PlayResult.Lose, PrizeName = e.Win ? (row.Prizes?.FirstOrDefault()?.Name) : null });
+        await db.SaveChangesAsync();
+        added++;
+    }
+    return Results.Ok(new { added, skipped, total = added + skipped });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
 record PlayDto(string? CampaignCode, string? Code, string? Name, string? Phone);
 record RegisterOrgDto(string Name);
+record ImportCampaignDto(string? Code, string? Name, string? Description, DateTime? FromDate, DateTime? ToDate, int? Status, int LoseWeight, List<ImportPrizeDto>? Prizes, List<ImportEntryDto>? Entries);
+record ImportPrizeDto(string? Name, string? Tier, decimal Value, int Quantity, int Weight);
+record ImportEntryDto(string? Code, string? CustomerName, string? Phone, bool Win);
