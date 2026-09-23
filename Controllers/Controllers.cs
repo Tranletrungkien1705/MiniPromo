@@ -118,3 +118,47 @@ public class OrgController(AppDbContext db) : Controller
         Response.Cookies.Append(TenantContext.CookieName, k, o); Response.Cookies.Append("org_name", n, o);
     }
 }
+
+// Chương trình voucher theo model + điều kiện áp dụng (port từ Prm_VoucherNewCar).
+public class VoucherProgramController(IVoucherProgramService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.ProgramsAsync());
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string name, string? code, DateTime effDateStart, DateTime effDateEnd,
+        int validityPeriod, int qtyDayLimitFDlvDate, bool flagAllModel, decimal pointVoucherAllModel, decimal pointUseLimitAllModel, string? remark)
+    {
+        var (ok, msg, id) = await svc.CreateProgramAsync(new VoucherProgram
+        {
+            Name = name ?? "", Code = (code ?? "").Trim().ToUpper(),
+            EffDateStart = effDateStart == default ? DateTime.Today : effDateStart,
+            EffDateEnd = effDateEnd == default ? DateTime.Today.AddMonths(1) : effDateEnd,
+            ValidityPeriod = validityPeriod, QtyDayLimitFDlvDate = qtyDayLimitFDlvDate,
+            FlagAllModel = flagAllModel, PointVoucherAllModel = pointVoucherAllModel,
+            PointUseLimitAllModel = pointUseLimitAllModel, Remark = remark
+        });
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Detail), new { id }) : RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var p = await svc.GetProgramAsync(id);
+        if (p == null) return NotFound();
+        return View(p);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddDetail(int id, string modelCode, decimal pointVoucher, decimal pointUseLimit, string? remark)
+    {
+        var (ok, msg) = await svc.AddDetailAsync(new VoucherProgramDtl { VoucherProgramId = id, ModelCode = modelCode ?? "", PointVoucher = pointVoucher, PointUseLimit = pointUseLimit, Remark = remark });
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetStatus(int id, VoucherProgramStatus status)
+    {
+        var (ok, msg) = await svc.SetStatusAsync(id, status);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+}

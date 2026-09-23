@@ -28,4 +28,13 @@ public static class Ui
         VoucherStatus.UsedUp   => ("Hết lượt/điểm", "warning"),
         _ => (s.ToString(), "secondary")
     };
+
+    public static (string text, string css) VoucherProgram(VoucherProgramStatus s) => s switch
+    {
+        VoucherProgramStatus.Pending   => ("Chờ duyệt", "secondary"),
+        VoucherProgramStatus.Approved  => ("Đã duyệt", "info"),
+        VoucherProgramStatus.Finished  => ("Hoàn tất", "success"),
+        VoucherProgramStatus.Cancelled => ("Đã huỷ", "dark"),
+        _ => (s.ToString(), "secondary")
+    };
 }

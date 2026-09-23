@@ -21,6 +21,7 @@ builder.Services.AddDbContext<AppDbContext>(o =>
 builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddScoped<IPromoService, PromoService>();
 builder.Services.AddScoped<IVoucherService, VoucherService>();
+builder.Services.AddScoped<IVoucherProgramService, VoucherProgramService>();
 builder.Services.AddFleetObs();
 builder.Services.AddControllersWithViews();
 
@@ -65,6 +66,13 @@ app.MapPost("/api/voucher/redeem", async (RedeemDto dto, IVoucherService svc) =>
 {
     var r = await svc.RedeemAsync(dto.Code ?? "", dto.Amount, dto.MemberNo);
     return Results.Ok(new { ok = r.ok, msg = r.msg, pointUsed = r.pointUsed, pointRemain = r.pointRemain, qtyUseRemain = r.qtyUseRemain });
+});
+
+// Tính giá trị voucher cho một xe theo chương trình đang hiệu lực (công khai).
+app.MapPost("/api/voucher-program/calc", async (VoucherCalcDto dto, IVoucherProgramService svc) =>
+{
+    var r = await svc.CalcAsync(dto.ModelCode ?? "", dto.DeliveryDate, dto.RegistrationDate);
+    return Results.Ok(new { ok = r.ok, msg = r.msg, pointVoucher = r.pointVoucher, pointUseLimit = r.pointUseLimit, modelCode = r.modelCode });
 });
 
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
@@ -113,6 +121,7 @@ app.Run();
 
 record PlayDto(string? CampaignCode, string? Code, string? Name, string? Phone);
 record RedeemDto(string? Code, decimal? Amount, string? MemberNo);
+record VoucherCalcDto(string? ModelCode, DateTime? DeliveryDate, DateTime? RegistrationDate);
 record RegisterOrgDto(string Name);
 record ImportCampaignDto(string? Code, string? Name, string? Description, DateTime? FromDate, DateTime? ToDate, int? Status, int LoseWeight, List<ImportPrizeDto>? Prizes, List<ImportEntryDto>? Entries);
 record ImportPrizeDto(string? Name, string? Tier, decimal Value, int Quantity, int Weight);

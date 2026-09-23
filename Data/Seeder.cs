@@ -34,13 +34,30 @@ public static class Seeder
                 new Voucher { Code = "DIEM200K", Name = "Điểm voucher 200.000đ", MemberNo = "HV002", PointTotal = 200_000, PointLimit = 50_000, QtyUseLimit = 4, ExpireDate = DateTime.Today.AddMonths(2) });
             await db.SaveChangesAsync();
         }
+
+        if (!await db.VoucherPrograms.AnyAsync())
+        {
+            var p = new VoucherProgram
+            {
+                Code = "VOUCHER2026", Name = "Voucher mua xe 2026",
+                EffDateStart = DateTime.Today.AddDays(-3), EffDateEnd = DateTime.Today.AddMonths(2),
+                ValidityPeriod = 30, QtyDayLimitFDlvDate = 30, FlagAllModel = false,
+                PointVoucherAllModel = 0, PointUseLimitAllModel = 0,
+                Status = VoucherProgramStatus.Finished, Remark = "Áp dụng theo model xe, phát khi mở thẻ trong 30 ngày kể từ ngày giao xe."
+            };
+            db.VoucherPrograms.Add(p); await db.SaveChangesAsync();
+            db.VoucherProgramDtls.AddRange(
+                new VoucherProgramDtl { VoucherProgramId = p.Id, ModelCode = "CITY", PointVoucher = 5_000_000, PointUseLimit = 5_000_000 },
+                new VoucherProgramDtl { VoucherProgramId = p.Id, ModelCode = "CRV", PointVoucher = 10_000_000, PointUseLimit = 10_000_000 });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions" };
+        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls" };
         var sql = new List<string> {
             "CREATE TABLE IF NOT EXISTS minipromo.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON minipromo.\"Orgs\" (\"ApiKey\")" };

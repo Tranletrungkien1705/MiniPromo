@@ -12,7 +12,7 @@ namespace MiniPromo.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Produces("application/json")]
-public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, ICache cache, ITenantContext tenant) : ControllerBase
+public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICache cache, ITenantContext tenant) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard()
@@ -166,6 +166,73 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, ICache
         return o.ok ? Ok(new { ok = o.ok, msg = o.msg, pointUsed = o.pointUsed, pointRemain = o.pointRemain, qtyUseRemain = o.qtyUseRemain })
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
+
+    // ---- Chương trình voucher theo model + điều kiện áp dụng (port từ Prm_VoucherNewCar) ----
+    [HttpGet("voucher-programs")]
+    public async Task<IActionResult> VoucherPrograms()
+        => Ok((await programs.ProgramsAsync()).Select(p => new
+        {
+            p.Id, p.Code, p.Name, p.EffDateStart, p.EffDateEnd, p.ValidityPeriod, p.QtyDayLimitFDlvDate,
+            p.FlagAllModel, p.PointVoucherAllModel, p.PointUseLimitAllModel,
+            status = (int)p.Status, statusText = Ui.VoucherProgram(p.Status).text, statusCss = Ui.VoucherProgram(p.Status).css,
+            live = p.IsLiveNow, details = p.Details.Count
+        }));
+
+    [HttpGet("voucher-programs/{id:int}")]
+    public async Task<IActionResult> VoucherProgram(int id)
+    {
+        var p = await programs.GetProgramAsync(id);
+        if (p == null) return NotFound(new { error = "Không tìm thấy chương trình." });
+        return Ok(new
+        {
+            p.Id, p.Code, p.Name, p.EffDateStart, p.EffDateEnd, p.ValidityPeriod, p.QtyDayLimitFDlvDate,
+            p.FlagAllModel, p.PointVoucherAllModel, p.PointUseLimitAllModel, p.Remark,
+            status = (int)p.Status, statusText = Ui.VoucherProgram(p.Status).text, live = p.IsLiveNow,
+            details = p.Details.Select(d => new { d.Id, d.ModelCode, d.PointVoucher, d.PointUseLimit, d.Remark })
+        });
+    }
+
+    [HttpPost("voucher-programs")]
+    public async Task<IActionResult> CreateVoucherProgram([FromBody] VoucherProgramReq r)
+    {
+        var (ok, msg, id) = await programs.CreateProgramAsync(new VoucherProgram
+        {
+            Code = r.Code ?? "", Name = r.Name,
+            EffDateStart = r.EffDateStart == default ? DateTime.Today : r.EffDateStart,
+            EffDateEnd = r.EffDateEnd == default ? DateTime.Today.AddMonths(1) : r.EffDateEnd,
+            ValidityPeriod = r.ValidityPeriod, QtyDayLimitFDlvDate = r.QtyDayLimitFDlvDate,
+            FlagAllModel = r.FlagAllModel, PointVoucherAllModel = r.PointVoucherAllModel,
+            PointUseLimitAllModel = r.PointUseLimitAllModel, Remark = r.Remark
+        });
+        return ok ? Ok(new { id }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("voucher-programs/{id:int}/details")]
+    public async Task<IActionResult> AddVoucherProgramDetail(int id, [FromBody] VoucherProgramDtlReq r)
+    {
+        var (ok, msg) = await programs.AddDetailAsync(new VoucherProgramDtl
+        {
+            VoucherProgramId = id, ModelCode = r.ModelCode ?? "",
+            PointVoucher = r.PointVoucher, PointUseLimit = r.PointUseLimit, Remark = r.Remark
+        });
+        return ok ? Ok(new { ok }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("voucher-programs/{id:int}/status")]
+    public async Task<IActionResult> SetVoucherProgramStatus(int id, [FromBody] StatusReq r)
+    {
+        var (ok, msg) = await programs.SetStatusAsync(id, (VoucherProgramStatus)r.Status);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Tính giá trị voucher cho một xe theo chương trình đang hiệu lực (công khai).
+    [HttpPost("voucher-program/calc")]
+    public async Task<IActionResult> CalcVoucher([FromBody] VoucherCalcReq r)
+    {
+        var o = await programs.CalcAsync(r.ModelCode ?? "", r.DeliveryDate, r.RegistrationDate);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, pointVoucher = o.pointVoucher, pointUseLimit = o.pointUseLimit, modelCode = o.modelCode })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
 }
 
 public record DashDto(int Campaigns, int Running, int TotalPlays, int TotalWins, decimal ValueAwarded, List<TopDto> Top);
@@ -179,3 +246,6 @@ public class PlayReq { public string? CampaignCode { get; set; } public string? 
 public class VoucherReq { public string? Code { get; set; } public string Name { get; set; } = ""; public string? MemberNo { get; set; } public decimal PointTotal { get; set; } public decimal PointLimit { get; set; } public int QtyUseLimit { get; set; } public DateTime ExpireDate { get; set; } }
 public class ActiveReq { public bool Active { get; set; } }
 public class RedeemReq { public string? Code { get; set; } public decimal? Amount { get; set; } public string? MemberNo { get; set; } }
+public class VoucherProgramReq { public string? Code { get; set; } public string Name { get; set; } = ""; public DateTime EffDateStart { get; set; } public DateTime EffDateEnd { get; set; } public int ValidityPeriod { get; set; } public int QtyDayLimitFDlvDate { get; set; } public bool FlagAllModel { get; set; } = true; public decimal PointVoucherAllModel { get; set; } public decimal PointUseLimitAllModel { get; set; } public string? Remark { get; set; } }
+public class VoucherProgramDtlReq { public string? ModelCode { get; set; } public decimal PointVoucher { get; set; } public decimal PointUseLimit { get; set; } public string? Remark { get; set; } }
+public class VoucherCalcReq { public string? ModelCode { get; set; } public DateTime? DeliveryDate { get; set; } public DateTime? RegistrationDate { get; set; } }

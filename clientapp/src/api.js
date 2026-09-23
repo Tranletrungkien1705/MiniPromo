@@ -17,8 +17,15 @@ export const api = {
   addPrize: (id, b) => req(`/campaigns/${id}/prizes`, { method: 'POST', body: b }),
   entries: (campaignId, result) => req(`/entries?${campaignId ? `campaignId=${campaignId}&` : ''}${result != null ? `result=${result}` : ''}`),
   setClaim: (id, status) => req(`/entries/${id}/claim`, { method: 'POST', body: { status } }),
-  play: (b) => req('/play', { method: 'POST', body: b })
+  play: (b) => req('/play', { method: 'POST', body: b }),
+  vouchers: () => req('/vouchers'),
+  voucher: (id) => req(`/vouchers/${id}`),
+  createVoucher: (b) => req('/vouchers', { method: 'POST', body: b }),
+  setVoucherActive: (id, active) => req(`/vouchers/${id}/active`, { method: 'POST', body: { active } }),
+  voucherRedemptions: (voucherId) => req(`/voucher-redemptions?${voucherId ? `voucherId=${voucherId}` : ''}`),
+  redeem: (b) => req('/voucher/redeem', { method: 'POST', body: b })
 }
 export const fmtMoney = (n) => (n ?? 0).toLocaleString('vi-VN') + 'đ'
 export const fmtDate = (s) => s ? new Date(s).toLocaleDateString('vi-VN') : '—'
 export const CSTATUS = ['Nháp', 'Đang chạy', 'Kết thúc']
+export const VSTATUS = ['Tạm dừng', 'Khả dụng', 'Hết hạn', 'Hết lượt/điểm']

@@ -1,0 +1,53 @@
+@model VoucherProgram
+@{ ViewData["Title"] = Model.Name; var (t, css) = Ui.VoucherProgram(Model.Status); }
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card mb-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h5 class="fw-bold mb-1">@Model.Name <span class="badge bg-@css ms-1">@t</span></h5>
+                    <div class="text-muted small">Mã <b>@Model.Code</b> · @Model.EffDateStart.ToString("dd/MM/yyyy") – @Model.EffDateEnd.ToString("dd/MM/yyyy")</div>
+                    @if (!string.IsNullOrEmpty(Model.Remark)) { <div class="small mt-1">@Model.Remark</div> }
+                </div>
+                <div class="text-end">
+                    @if (Model.Status == VoucherProgramStatus.Pending) { <form asp-action="SetStatus" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="status" value="1" /><button class="btn btn-sm btn-outline-primary">Duyệt</button></form> }
+                    else if (Model.Status == VoucherProgramStatus.Approved) { <form asp-action="SetStatus" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="status" value="2" /><button class="btn btn-sm btn-success">Hoàn tất</button></form> }
+                    @if (Model.Status != VoucherProgramStatus.Cancelled && Model.Status != VoucherProgramStatus.Finished) { <form asp-action="SetStatus" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="status" value="3" /><button class="btn btn-sm btn-outline-dark">Huỷ</button></form> }
+                </div>
+            </div>
+            <div class="row g-2 text-center mt-2">
+                <div class="col"><div class="text-muted small">Hạn voucher</div><div class="fw-bold">@Model.ValidityPeriod ngày</div></div>
+                <div class="col"><div class="text-muted small">Giới hạn từ giao xe</div><div class="fw-bold">@Model.QtyDayLimitFDlvDate ngày</div></div>
+                <div class="col"><div class="text-muted small">Phạm vi</div><div class="fw-bold">@(Model.FlagAllModel ? "Tất cả model" : $"{Model.Details.Count} model")</div></div>
+                <div class="col"><div class="text-muted small">Giá trị chung</div><div class="fw-bold" style="color:#db2777">@Ui.Money(Model.PointVoucherAllModel)</div></div>
+            </div>
+        </div></div>
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-2">Chi tiết theo model</h6>
+            <table class="table table-sm align-middle">
+                <thead><tr><th>Model</th><th class="text-end">Giá trị voucher</th><th class="text-end">Hạn mức dùng</th><th>Ghi chú</th></tr></thead>
+                <tbody>
+                @foreach (var d in Model.Details)
+                {
+                    <tr><td class="fw-semibold small">@d.ModelCode</td><td class="text-end">@Ui.Money(d.PointVoucher)</td><td class="text-end">@Ui.Money(d.PointUseLimit)</td><td class="small text-muted">@d.Remark</td></tr>
+                }
+                @if (Model.Details.Count == 0) { <tr><td colspan="4" class="text-center text-muted py-3">@(Model.FlagAllModel ? "Áp dụng tất cả model — không cần dòng chi tiết." : "Chưa có dòng model.")</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3">Thêm dòng model</h6>
+            <form asp-action="AddDetail" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                <div class="mb-2"><input name="modelCode" class="form-control form-control-sm text-uppercase" placeholder="Mã model *" required /></div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><input name="pointVoucher" type="number" step="1000" class="form-control form-control-sm" placeholder="Giá trị *" required /></div>
+                    <div class="col-6"><input name="pointUseLimit" type="number" step="1000" class="form-control form-control-sm" placeholder="Hạn mức" /></div>
+                </div>
+                <div class="mb-3"><input name="remark" class="form-control form-control-sm" placeholder="Ghi chú" /></div>
+                <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Thêm model</button>
+            </form>
+        </div></div>
+    </div>
+</div>
