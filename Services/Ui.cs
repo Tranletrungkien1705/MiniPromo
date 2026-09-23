@@ -195,4 +195,11 @@ public static class Ui
         PolicyMoneyToPointStatus.Inactive => ("Tạm dừng", "secondary"),
         _ => (s.ToString(), "secondary")
     };
+
+    public static string DiscountCodeTypeText(DiscountCodeType t) => t switch
+    {
+        DiscountCodeType.Percent  => "Giảm theo %",
+        DiscountCodeType.Absolute => "Giảm số tiền",
+        _ => t.ToString()
+    };
 }

@@ -1,0 +1,67 @@
+@model DiscountCode
+@{ ViewData["Title"] = "Mã giảm giá " + Model.Code; }
+@{
+    var maps = (List<DealerDiscountMap>)(ViewBag.Maps ?? new List<DealerDiscountMap>());
+    var myMaps = maps.Where(m => m.DiscountCode == Model.Code).ToList();
+}
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="fw-bold mb-0">Mã giảm giá <span class="text-primary">@Model.Code</span></h5>
+    <a href="/DiscountCode" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
+</div>
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Thông tin mã</h6>
+            <table class="table table-sm mb-0">
+                <tr><th style="width:40%">Mã</th><td class="fw-semibold">@Model.Code</td></tr>
+                <tr><th>Mô tả</th><td>@(Model.Description ?? "—")</td></tr>
+                <tr><th>Kiểu giảm</th><td>@Ui.DiscountCodeTypeText(Model.DiscountType)</td></tr>
+                <tr><th>Giá trị giảm</th><td>@(Model.DiscountType == DiscountCodeType.Percent ? Model.DiscountAmount.ToString("N0") + "%" : Ui.Money(Model.DiscountAmount))</td></tr>
+                <tr><th>Lượt còn lại</th><td>@Model.RemainQty</td></tr>
+                <tr><th>Hiệu lực</th><td>@Model.EffectDateFrom.ToString("dd/MM/yyyy") – @Model.EffectDateTo.ToString("dd/MM/yyyy")</td></tr>
+                <tr><th>Trạng thái</th><td>
+                    @if (Model.Enabled) { <span class="badge bg-success">Đang bật</span> } else { <span class="badge bg-secondary">Đang tắt</span> }
+                    @if (Model.IsLiveNow) { <span class="badge bg-info">Hiệu lực</span> }
+                </td></tr>
+            </table>
+        </div></div>
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3">Đại lý được gán mã</h6>
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr><th>Đại lý</th><th>Trạng thái</th><th>Ghi chú</th></tr></thead>
+                <tbody>
+                @foreach (var m in myMaps)
+                {
+                    <tr>
+                        <td class="fw-semibold">@m.DealerCode</td>
+                        <td>@if (m.FlagActive) { <span class="badge bg-success">Đang bật</span> } else { <span class="badge bg-secondary">Tạm dừng</span> }</td>
+                        <td class="small text-muted">@(m.Remark ?? "—")</td>
+                    </tr>
+                }
+                @if (myMaps.Count == 0) { <tr><td colspan="3" class="text-center text-muted py-3">Chưa gán đại lý nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Trạng thái</h6>
+            <form asp-action="SetEnabled" method="post">@Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <input type="hidden" name="enabled" value="@((!Model.Enabled).ToString().ToLower())" />
+                <button class="btn @(Model.Enabled ? "btn-outline-danger" : "btn-success") w-100">
+                    <i class="bi @(Model.Enabled ? "bi-pause-circle" : "bi-play-circle") me-1"></i>@(Model.Enabled ? "Tắt mã" : "Bật mã")
+                </button>
+            </form>
+        </div></div>
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3">Gán mã cho đại lý</h6>
+            <form asp-action="AddMap" method="post">@Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <div class="mb-2"><input name="dealerCode" class="form-control form-control-sm text-uppercase" placeholder="Mã đại lý *" required /></div>
+                <div class="mb-3"><input name="remark" class="form-control form-control-sm" placeholder="Ghi chú" /></div>
+                <button class="btn btn-primary w-100"><i class="bi bi-link-45deg me-1"></i>Gán</button>
+            </form>
+        </div></div>
+    </div>
+</div>

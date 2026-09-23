@@ -33,6 +33,7 @@ builder.Services.AddScoped<IRankPolicyService, RankPolicyService>();
 builder.Services.AddScoped<IPolicyMoneyToPointService, PolicyMoneyToPointService>();
 builder.Services.AddScoped<IMemberDiscountService, MemberDiscountService>();
 builder.Services.AddScoped<IPromotionTypeService, PromotionTypeService>();
+builder.Services.AddScoped<IDiscountCodeService, DiscountCodeService>();
 builder.Services.AddFleetObs();
 builder.Services.AddControllersWithViews();
 
@@ -194,6 +195,20 @@ app.MapPost("/api/promotion-type/check", async (PrmInMainDto dto, IPromotionType
     return Results.Ok(new { ok = r.ok, msg = r.msg, mainTypeCode = r.mainTypeCode, prmTypeCode = r.prmTypeCode });
 });
 
+// Kiểm tra một mã giảm giá có hợp lệ cho một đơn hàng (công khai, xuyên tenant qua mã).
+app.MapPost("/api/discount-code/check", async (DiscountCheckDto dto, IDiscountCodeService svc) =>
+{
+    var r = await svc.CheckAsync(dto.Code ?? "", dto.OrderAmount, dto.At);
+    return Results.Ok(new { ok = r.ok, msg = r.msg, code = r.code, discountAmount = r.discountAmount, discountType = (int)r.discountType });
+});
+
+// Áp dụng mã giảm giá cho một đơn hàng (công khai, xuyên tenant qua mã).
+app.MapPost("/api/discount-code/apply", async (DiscountApplyDto dto, IDiscountCodeService svc) =>
+{
+    var r = await svc.ApplyAsync(dto.Code ?? "", dto.OrderAmount, dto.At);
+    return Results.Ok(new { ok = r.ok, msg = r.msg, code = r.code, discount = r.discount, orderAmount = r.orderAmount, payable = r.payable, remainQty = r.remainQty });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -255,6 +270,8 @@ record MemberDiscountLineDto(decimal AmountForDC, decimal PaymentDiscountRate, b
 record MemberDiscountCalcDto(string? RefNo, string? CardTypeApply, DateTime? At, List<MemberDiscountLineDto>? Lines);
 record MemberDiscountRecordDto(string? RefNo, string? DealerCode, string? MemberNo, string? CardNo, string? CardTypeUse, string? CardTypeInit, string? CardTypeApply, DateTime? At, List<MemberDiscountLineDto>? Lines);
 record PrmInMainDto(string? MainTypeCode, string? PrmTypeCode);
+record DiscountCheckDto(string? Code, decimal OrderAmount, DateTime? At);
+record DiscountApplyDto(string? Code, decimal OrderAmount, DateTime? At);
 record RegisterOrgDto(string Name);
 record ImportCampaignDto(string? Code, string? Name, string? Description, DateTime? FromDate, DateTime? ToDate, int? Status, int LoseWeight, List<ImportPrizeDto>? Prizes, List<ImportEntryDto>? Entries);
 record ImportPrizeDto(string? Name, string? Tier, decimal Value, int Quantity, int Weight);

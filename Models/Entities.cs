@@ -758,4 +758,42 @@ public class PromotionPrmInMain : IOrgOwned
     public bool FlagActive { get; set; } = true;           // Trạng thái áp dụng
     public string? Remark { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}// Kiểu giảm giá của mã giảm giá — theo nguồn Inos_DiscountCodeTypes.
+// Percent: giảm theo % giá trị đơn; Absolute: giảm số tiền cố định.
+public enum DiscountCodeType { Percent = 1, Absolute = 2 }
+
+// Mã giảm giá — port từ Inos_DiscountCode của hệ Loyalty.
+// Mỗi mã có số lượt sử dụng còn lại (RemainQty), kiểu giảm giá (Percent/Absolute) và giá trị giảm
+// (DiscountAmount), trạng thái bật/tắt (Enabled) và khoảng ngày hiệu lực (EffectDateFrom..EffectDateTo).
+// Quy tắc dùng (nguồn Master.cs): mã phải tồn tại và đang bật (Enabled) mới hợp lệ cho đơn hàng.
+public class DiscountCode : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";                 // Mã giảm giá (người dùng nhập)
+    public string? Description { get; set; }               // Mô tả
+    public DiscountCodeType DiscountType { get; set; } = DiscountCodeType.Percent;  // Kiểu giảm giá
+    public decimal DiscountAmount { get; set; }            // Giá trị giảm (% hoặc số tiền)
+    public int RemainQty { get; set; }                     // Số lượt sử dụng còn lại
+    public bool Enabled { get; set; } = true;              // Trạng thái bật/tắt
+    public DateTime EffectDateFrom { get; set; } = DateTime.Today;
+    public DateTime EffectDateTo { get; set; } = DateTime.Today.AddMonths(1);
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    // Mã còn hiệu lực: đang bật, còn lượt và trong khoảng ngày hiệu lực.
+    public bool IsLiveNow => Enabled && RemainQty > 0
+        && DateTime.Today >= EffectDateFrom.Date && DateTime.Today <= EffectDateTo.Date;
+}
+
+// Ánh xạ đại lý ↔ mã giảm giá — port từ Map_DealerDiscount của hệ Loyalty.
+// Cho biết một đại lý (DLCode) được phép dùng một mã giảm giá (DiscountCode) nào.
+public class DealerDiscountMap : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string DealerCode { get; set; } = "";           // DLCode — đại lý áp dụng
+    public string DiscountCode { get; set; } = "";         // Mã giảm giá được gán
+    public bool FlagActive { get; set; } = true;           // Trạng thái áp dụng
+    public string? Remark { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

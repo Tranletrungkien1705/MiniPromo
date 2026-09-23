@@ -851,3 +851,60 @@ public class PromotionTypeController(IPromotionTypeService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 }
+
+// Mã giảm giá + ánh xạ đại lý (port từ Inos_DiscountCode + Map_DealerDiscount).
+public class DiscountCodeController(IDiscountCodeService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.CodesAsync());
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string code, string? description, DiscountCodeType discountType,
+        decimal discountAmount, int remainQty, DateTime effectDateFrom, DateTime effectDateTo)
+    {
+        var (ok, msg, id) = await svc.CreateCodeAsync(new DiscountCode
+        {
+            Code = (code ?? "").Trim().ToUpper(), Description = description, DiscountType = discountType,
+            DiscountAmount = discountAmount, RemainQty = remainQty,
+            EffectDateFrom = effectDateFrom == default ? DateTime.Today : effectDateFrom,
+            EffectDateTo = effectDateTo == default ? DateTime.Today.AddMonths(1) : effectDateTo
+        });
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Detail), new { id }) : RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var c = await svc.GetCodeAsync(id);
+        if (c == null) return NotFound();
+        ViewBag.Maps = await svc.MapsAsync(null);
+        return View(c);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetEnabled(int id, bool enabled)
+    {
+        var (ok, msg) = await svc.SetEnabledAsync(id, enabled);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Gán mã giảm giá cho một đại lý (port từ Map_DealerDiscount).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddMap(int id, string dealerCode, string? remark)
+    {
+        var c = await svc.GetCodeAsync(id);
+        if (c == null) return NotFound();
+        var (ok, msg, _) = await svc.AddMapAsync(new DealerDiscountMap { DealerCode = dealerCode ?? "", DiscountCode = c.Code, Remark = remark });
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Kiểm tra một mã giảm giá có hợp lệ cho một đơn hàng.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Check(string code, decimal orderAmount, DateTime? at)
+    {
+        var o = await svc.CheckAsync(code ?? "", orderAmount, at);
+        TempData[o.ok ? "Success" : "Error"] = o.ok
+            ? $"Mã {o.code} hợp lệ, giảm {Ui.Money(o.discountAmount)}."
+            : o.msg;
+        return RedirectToAction(nameof(Index));
+    }
+}

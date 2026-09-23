@@ -2431,4 +2431,165 @@ public class PromotionTypeServiceTests
             Assert.False((await svc.CheckPrmInMainAsync("PRODUCT", "NOPE")).ok);
         }
     }
+}/// <summary>Test mã giảm giá: chặn trùng mã, validate giá trị, bật/tắt, kiểm tra hợp lệ (tồn tại + đang bật +
+/// còn lượt + trong hiệu lực), áp dụng trừ lượt, tính giảm theo %/số tiền, ánh xạ đại lý.</summary>
+public class DiscountCodeServiceTests
+{
+    private static (AppDbContext db, IDiscountCodeService svc, SqliteConnection conn) NewSvc()
+    {
+        var conn = new SqliteConnection("DataSource=:memory:"); conn.Open();
+        var opt = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conn).Options;
+        var db = new AppDbContext(opt, new TenantContext { OrgId = TenantContext.DefaultOrgId });
+        db.Database.EnsureCreated();
+        return (db, new DiscountCodeService(db), conn);
+    }
+
+    private static async Task<int> SeedPercent(IDiscountCodeService svc, decimal pct = 10, int qty = 5)
+    {
+        var (_, _, id) = await svc.CreateCodeAsync(new DiscountCode
+        {
+            Code = "SALE10", DiscountType = DiscountCodeType.Percent, DiscountAmount = pct, RemainQty = qty,
+            EffectDateFrom = DateTime.Today.AddDays(-1), EffectDateTo = DateTime.Today.AddDays(10)
+        });
+        return id;
+    }
+
+    [Fact]
+    public async Task Create_RequiresCode()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            Assert.False((await svc.CreateCodeAsync(new DiscountCode { Code = "", DiscountAmount = 10 })).ok);
+        }
+    }
+
+    [Fact]
+    public async Task Create_DuplicateCode_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SeedPercent(svc);
+            var o = await svc.CreateCodeAsync(new DiscountCode { Code = "SALE10", DiscountType = DiscountCodeType.Percent, DiscountAmount = 5, RemainQty = 1 });
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Create_PercentOver100_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var o = await svc.CreateCodeAsync(new DiscountCode { Code = "X", DiscountType = DiscountCodeType.Percent, DiscountAmount = 150, RemainQty = 1 });
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Check_Valid_WhenEnabledInRange()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SeedPercent(svc);
+            var o = await svc.CheckAsync("SALE10", 1_000_000, null);
+            Assert.True(o.ok);
+            Assert.Equal(100_000, o.discountAmount);   // 10% của 1.000.000
+        }
+    }
+
+    [Fact]
+    public async Task Check_UnknownCode_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            Assert.False((await svc.CheckAsync("NOPE", 1_000_000, null)).ok);
+        }
+    }
+
+    [Fact]
+    public async Task Check_Disabled_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var id = await SeedPercent(svc);
+            await svc.SetEnabledAsync(id, false);
+            Assert.False((await svc.CheckAsync("SALE10", 1_000_000, null)).ok);
+        }
+    }
+
+    [Fact]
+    public async Task Check_OutOfRange_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SeedPercent(svc);
+            // Mốc ngày sau khi hết hiệu lực.
+            Assert.False((await svc.CheckAsync("SALE10", 1_000_000, DateTime.Today.AddDays(30))).ok);
+        }
+    }
+
+    [Fact]
+    public async Task Check_NoRemainQty_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SeedPercent(svc, qty: 0);
+            Assert.False((await svc.CheckAsync("SALE10", 1_000_000, null)).ok);
+        }
+    }
+
+    [Fact]
+    public async Task Apply_Absolute_CapsAtOrderAmount()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.CreateCodeAsync(new DiscountCode
+            {
+                Code = "GIAM50K", DiscountType = DiscountCodeType.Absolute, DiscountAmount = 50_000, RemainQty = 3,
+                EffectDateFrom = DateTime.Today.AddDays(-1), EffectDateTo = DateTime.Today.AddDays(10)
+            });
+            var o = await svc.ApplyAsync("GIAM50K", 30_000, null);
+            Assert.True(o.ok);
+            Assert.Equal(30_000, o.discount);      // không vượt giá trị đơn
+            Assert.Equal(0, o.payable);
+        }
+    }
+
+    [Fact]
+    public async Task Apply_DecrementsRemainQty()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SeedPercent(svc, qty: 2);
+            var o1 = await svc.ApplyAsync("SALE10", 1_000_000, null);
+            Assert.True(o1.ok);
+            Assert.Equal(1, o1.remainQty);
+            var o2 = await svc.ApplyAsync("SALE10", 1_000_000, null);
+            Assert.Equal(0, o2.remainQty);
+            // Hết lượt → lần sau bị từ chối.
+            Assert.False((await svc.ApplyAsync("SALE10", 1_000_000, null)).ok);
+        }
+    }
+
+    [Fact]
+    public async Task AddMap_Duplicate_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.AddMapAsync(new DealerDiscountMap { DealerCode = "DLCP01", DiscountCode = "SALE10" });
+            var o = await svc.AddMapAsync(new DealerDiscountMap { DealerCode = "DLCP01", DiscountCode = "SALE10" });
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Maps_FilterByDealer()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.AddMapAsync(new DealerDiscountMap { DealerCode = "DLCP01", DiscountCode = "SALE10" });
+            await svc.AddMapAsync(new DealerDiscountMap { DealerCode = "DLCP02", DiscountCode = "SALE10" });
+            Assert.Single(await svc.MapsAsync("DLCP01"));
+            Assert.Equal(2, (await svc.MapsAsync(null)).Count);
+        }
+    }
 }

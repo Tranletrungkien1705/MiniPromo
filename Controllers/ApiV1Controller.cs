@@ -12,7 +12,7 @@ namespace MiniPromo.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Produces("application/json")]
-public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IIssueVoucherService issueVouchers, IParamPromotionService paramPromotions, IRankPolicyService rankPolicies, IPolicyMoneyToPointService moneyToPoints, IMemberDiscountService memberDiscounts, IPromotionTypeService promotionTypes, ICache cache, ITenantContext tenant) : ControllerBase
+public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IIssueVoucherService issueVouchers, IParamPromotionService paramPromotions, IRankPolicyService rankPolicies, IPolicyMoneyToPointService moneyToPoints, IMemberDiscountService memberDiscounts, IPromotionTypeService promotionTypes, IDiscountCodeService discountCodes, ICache cache, ITenantContext tenant) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard()
@@ -1179,6 +1179,89 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
         return o.ok ? Ok(new { ok = o.ok, msg = o.msg, mainTypeCode = o.mainTypeCode, prmTypeCode = o.prmTypeCode })
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
+
+    // ---- Mã giảm giá + ánh xạ đại lý (port từ Inos_DiscountCode + Map_DealerDiscount) ----
+    [HttpGet("discount-codes")]
+    public async Task<IActionResult> DiscountCodes()
+        => Ok((await discountCodes.CodesAsync()).Select(c => new
+        {
+            c.Id, c.Code, c.Description,
+            discountType = (int)c.DiscountType, discountTypeText = Ui.DiscountCodeTypeText(c.DiscountType),
+            c.DiscountAmount, c.RemainQty, c.Enabled, enabledText = c.Enabled ? "Đang bật" : "Đang tắt",
+            c.EffectDateFrom, c.EffectDateTo, live = c.IsLiveNow
+        }));
+
+    [HttpGet("discount-codes/{id:int}")]
+    public async Task<IActionResult> DiscountCode(int id)
+    {
+        var c = await discountCodes.GetCodeAsync(id);
+        if (c == null) return NotFound(new { error = "Không tìm thấy mã giảm giá." });
+        return Ok(new
+        {
+            c.Id, c.Code, c.Description,
+            discountType = (int)c.DiscountType, discountTypeText = Ui.DiscountCodeTypeText(c.DiscountType),
+            c.DiscountAmount, c.RemainQty, c.Enabled, c.EffectDateFrom, c.EffectDateTo, live = c.IsLiveNow
+        });
+    }
+
+    [HttpPost("discount-codes")]
+    public async Task<IActionResult> CreateDiscountCode([FromBody] DiscountCodeReq r)
+    {
+        var (ok, msg, id) = await discountCodes.CreateCodeAsync(new DiscountCode
+        {
+            Code = r.Code ?? "", Description = r.Description, DiscountType = (DiscountCodeType)r.DiscountType,
+            DiscountAmount = r.DiscountAmount, RemainQty = r.RemainQty,
+            EffectDateFrom = r.EffectDateFrom == default ? DateTime.Today : r.EffectDateFrom,
+            EffectDateTo = r.EffectDateTo == default ? DateTime.Today.AddMonths(1) : r.EffectDateTo
+        });
+        return ok ? Ok(new { id }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("discount-codes/{id:int}/enabled")]
+    public async Task<IActionResult> SetDiscountCodeEnabled(int id, [FromBody] ActiveReq r)
+    {
+        var (ok, msg) = await discountCodes.SetEnabledAsync(id, r.Active);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    [HttpGet("dealer-discount-maps")]
+    public async Task<IActionResult> DealerDiscountMaps([FromQuery] string? dealerCode)
+        => Ok((await discountCodes.MapsAsync(dealerCode)).Select(m => new
+        {
+            m.Id, m.DealerCode, m.DiscountCode, m.FlagActive, activeText = m.FlagActive ? "Đang bật" : "Tạm dừng", m.Remark
+        }));
+
+    [HttpPost("dealer-discount-maps")]
+    public async Task<IActionResult> AddDealerDiscountMap([FromBody] DealerDiscountMapReq r)
+    {
+        var (ok, msg, id) = await discountCodes.AddMapAsync(new DealerDiscountMap { DealerCode = r.DealerCode ?? "", DiscountCode = r.DiscountCode ?? "", Remark = r.Remark });
+        return ok ? Ok(new { id }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("dealer-discount-maps/{id:int}/active")]
+    public async Task<IActionResult> SetDealerDiscountMapActive(int id, [FromBody] ActiveReq r)
+    {
+        var (ok, msg) = await discountCodes.SetMapActiveAsync(id, r.Active);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Kiểm tra một mã giảm giá có hợp lệ cho một đơn hàng (công khai).
+    [HttpPost("discount-code/check")]
+    public async Task<IActionResult> CheckDiscountCode([FromBody] DiscountCheckReq r)
+    {
+        var o = await discountCodes.CheckAsync(r.Code ?? "", r.OrderAmount, r.At);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, code = o.code, discountAmount = o.discountAmount, discountType = (int)o.discountType })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
+
+    // Áp dụng mã giảm giá cho một đơn hàng (công khai).
+    [HttpPost("discount-code/apply")]
+    public async Task<IActionResult> ApplyDiscountCode([FromBody] DiscountApplyReq r)
+    {
+        var o = await discountCodes.ApplyAsync(r.Code ?? "", r.OrderAmount, r.At);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, code = o.code, discount = o.discount, orderAmount = o.orderAmount, payable = o.payable, remainQty = o.remainQty })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
 }
 
 public record DashDto(int Campaigns, int Running, int TotalPlays, int TotalWins, decimal ValueAwarded, List<TopDto> Top);
@@ -1230,6 +1313,10 @@ public class ParamWindowReq { public string? ProgramCode { get; set; } public st
 public class PromotionTypeReq { public string? Code { get; set; } public string Name { get; set; } = ""; public string? Remark { get; set; } }
 public class PromotionPrmInMainReq { public int MainTypeId { get; set; } public int PrmTypeId { get; set; } public string? Remark { get; set; } }
 public class PrmInMainReq { public string? MainTypeCode { get; set; } public string? PrmTypeCode { get; set; } }
+public class DiscountCodeReq { public string? Code { get; set; } public string? Description { get; set; } public int DiscountType { get; set; } public decimal DiscountAmount { get; set; } public int RemainQty { get; set; } public DateTime EffectDateFrom { get; set; } public DateTime EffectDateTo { get; set; } }
+public class DealerDiscountMapReq { public string? DealerCode { get; set; } public string? DiscountCode { get; set; } public string? Remark { get; set; } }
+public class DiscountCheckReq { public string? Code { get; set; } public decimal OrderAmount { get; set; } public DateTime? At { get; set; } }
+public class DiscountApplyReq { public string? Code { get; set; } public decimal OrderAmount { get; set; } public DateTime? At { get; set; } }
 public class RankPolicyReq { public string? Code { get; set; } public string? CardType { get; set; } public int Value { get; set; } public decimal PointUpBegin { get; set; } public decimal PointUpEnd { get; set; } public int QtyVisitUpBegin { get; set; } public int QtyVisitUpEnd { get; set; } public decimal PointKeepBegin { get; set; } public decimal PointKeepEnd { get; set; } public int QtyVisitKeepBegin { get; set; } public int QtyVisitKeepEnd { get; set; } public int QtyMonth { get; set; } = 12; public string? Remark { get; set; } }
 public class RankEvalReq { public string? CardType { get; set; } public decimal Point { get; set; } public int QtyVisit { get; set; } }
 public class PolicyMoneyToPointReq { public string? Code { get; set; } public string Name { get; set; } = ""; public DateTime EffDateStart { get; set; } public DateTime EffDateEnd { get; set; } public string? Remark { get; set; } }

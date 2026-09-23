@@ -46,6 +46,8 @@ public class AppDbContext : DbContext
     public DbSet<PromotionMainTypeDef> PromotionMainTypeDefs => Set<PromotionMainTypeDef>();
     public DbSet<PromotionPrmTypeDef> PromotionPrmTypeDefs => Set<PromotionPrmTypeDef>();
     public DbSet<PromotionPrmInMain> PromotionPrmInMains => Set<PromotionPrmInMain>();
+    public DbSet<DiscountCode> DiscountCodes => Set<DiscountCode>();
+    public DbSet<DealerDiscountMap> DealerDiscountMaps => Set<DealerDiscountMap>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -296,6 +298,18 @@ public class AppDbContext : DbContext
             e.HasIndex(x => new { x.MainTypeId, x.PrmTypeId }).IsUnique();   // 1 hình thức / 1 loại khuyến mại theo
             e.HasOne(x => x.MainType).WithMany(x => x.PrmInMains).HasForeignKey(x => x.MainTypeId);
             e.HasOne(x => x.PrmType).WithMany(x => x.PrmInMains).HasForeignKey(x => x.PrmTypeId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<DiscountCode>(e =>
+        {
+            e.HasIndex(x => x.Code).IsUnique();           // Mã giảm giá — duy nhất
+            e.Property(x => x.DiscountAmount).HasPrecision(18, 2);
+            e.Ignore(x => x.IsLiveNow);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<DealerDiscountMap>(e =>
+        {
+            e.HasIndex(x => new { x.DealerCode, x.DiscountCode }).IsUnique();   // 1 đại lý + 1 mã giảm giá
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }
