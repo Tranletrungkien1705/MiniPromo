@@ -12,7 +12,7 @@ namespace MiniPromo.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Produces("application/json")]
-public class ApiV1Controller(IPromoService svc, ICache cache, ITenantContext tenant) : ControllerBase
+public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, ICache cache, ITenantContext tenant) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard()
@@ -103,6 +103,69 @@ public class ApiV1Controller(IPromoService svc, ICache cache, ITenantContext ten
         return o.ok ? Ok(new { ok = o.ok, msg = o.msg, win = o.win, prize = o.prizeName, value = o.prizeValue })
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
+
+    // ---- Mã giảm giá / điểm voucher (port từ Crd_MemberVoucher) ----
+    [HttpGet("vouchers")]
+    public async Task<IActionResult> Vouchers()
+        => Ok((await vouchers.VouchersAsync()).Select(v => new
+        {
+            v.Id, v.Code, v.Name, v.MemberNo, v.PointTotal, v.PointRemain, v.PointLimit,
+            v.QtyUseLimit, v.QtyUseRemain, v.ExpireDate, v.Active,
+            status = (int)v.Status, statusText = Ui.Voucher(v.Status).text, statusCss = Ui.Voucher(v.Status).css,
+            usable = v.IsUsable
+        }));
+
+    [HttpGet("vouchers/{id:int}")]
+    public async Task<IActionResult> Voucher(int id)
+    {
+        var v = await vouchers.GetVoucherAsync(id);
+        if (v == null) return NotFound(new { error = "Không tìm thấy voucher." });
+        var stat = await vouchers.StatAsync(id);
+        return Ok(new
+        {
+            v.Id, v.Code, v.Name, v.MemberNo, v.PointTotal, v.PointRemain, v.PointLimit,
+            v.QtyUseLimit, v.QtyUseRemain, v.ExpireDate, v.Active,
+            status = (int)v.Status, statusText = Ui.Voucher(v.Status).text, usable = v.IsUsable,
+            redemptions = stat.Redemptions, pointUsed = stat.PointUsed
+        });
+    }
+
+    [HttpPost("vouchers")]
+    public async Task<IActionResult> CreateVoucher([FromBody] VoucherReq r)
+    {
+        var (ok, msg, id) = await vouchers.CreateVoucherAsync(new Voucher
+        {
+            Code = r.Code ?? "", Name = r.Name, MemberNo = r.MemberNo,
+            PointTotal = r.PointTotal, PointLimit = r.PointLimit,
+            QtyUseLimit = r.QtyUseLimit <= 0 ? 1 : r.QtyUseLimit,
+            ExpireDate = r.ExpireDate == default ? DateTime.Today.AddMonths(1) : r.ExpireDate
+        });
+        return ok ? Ok(new { id }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("vouchers/{id:int}/active")]
+    public async Task<IActionResult> SetVoucherActive(int id, [FromBody] ActiveReq r)
+    {
+        var (ok, msg) = await vouchers.SetActiveAsync(id, r.Active);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    [HttpGet("voucher-redemptions")]
+    public async Task<IActionResult> VoucherRedemptions([FromQuery] int? voucherId)
+        => Ok((await vouchers.RedemptionsAsync(voucherId)).Select(r => new
+        {
+            r.Id, voucher = r.Voucher?.Name, r.VoucherId, r.MemberNo,
+            r.PointUsed, r.PointRemainAfter, r.QtyUseRemainAfter, r.CreatedAt
+        }));
+
+    // Dùng voucher công khai theo mã (xuyên tenant).
+    [HttpPost("voucher/redeem")]
+    public async Task<IActionResult> Redeem([FromBody] RedeemReq r)
+    {
+        var o = await vouchers.RedeemAsync(r.Code ?? "", r.Amount, r.MemberNo);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, pointUsed = o.pointUsed, pointRemain = o.pointRemain, qtyUseRemain = o.qtyUseRemain })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
 }
 
 public record DashDto(int Campaigns, int Running, int TotalPlays, int TotalWins, decimal ValueAwarded, List<TopDto> Top);
@@ -113,3 +176,6 @@ public class StatusReq { public int Status { get; set; } }
 public class PrizeReq { public string Name { get; set; } = ""; public string? Tier { get; set; } public decimal Value { get; set; } public int Quantity { get; set; } public int Weight { get; set; } }
 public class ClaimReq { public int Status { get; set; } }
 public class PlayReq { public string? CampaignCode { get; set; } public string? Code { get; set; } public string? Name { get; set; } public string? Phone { get; set; } }
+public class VoucherReq { public string? Code { get; set; } public string Name { get; set; } = ""; public string? MemberNo { get; set; } public decimal PointTotal { get; set; } public decimal PointLimit { get; set; } public int QtyUseLimit { get; set; } public DateTime ExpireDate { get; set; } }
+public class ActiveReq { public bool Active { get; set; } }
+public class RedeemReq { public string? Code { get; set; } public decimal? Amount { get; set; } public string? MemberNo { get; set; } }

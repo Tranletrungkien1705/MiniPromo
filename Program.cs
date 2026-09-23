@@ -20,6 +20,7 @@ builder.Services.AddDbContext<AppDbContext>(o =>
 });
 builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddScoped<IPromoService, PromoService>();
+builder.Services.AddScoped<IVoucherService, VoucherService>();
 builder.Services.AddFleetObs();
 builder.Services.AddControllersWithViews();
 
@@ -57,6 +58,13 @@ app.MapPost("/api/play", async (PlayDto dto, IPromoService svc) =>
 {
     var r = await svc.PlayAsync(dto.CampaignCode ?? "", dto.Code ?? "", dto.Name, dto.Phone);
     return Results.Ok(new { ok = r.ok, msg = r.msg, win = r.win, prize = r.prizeName, value = r.prizeValue });
+});
+
+// Người tiêu dùng dùng mã giảm giá / điểm voucher (công khai, xuyên tenant qua mã voucher).
+app.MapPost("/api/voucher/redeem", async (RedeemDto dto, IVoucherService svc) =>
+{
+    var r = await svc.RedeemAsync(dto.Code ?? "", dto.Amount, dto.MemberNo);
+    return Results.Ok(new { ok = r.ok, msg = r.msg, pointUsed = r.pointUsed, pointRemain = r.pointRemain, qtyUseRemain = r.qtyUseRemain });
 });
 
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
@@ -104,6 +112,7 @@ app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Inde
 app.Run();
 
 record PlayDto(string? CampaignCode, string? Code, string? Name, string? Phone);
+record RedeemDto(string? Code, decimal? Amount, string? MemberNo);
 record RegisterOrgDto(string Name);
 record ImportCampaignDto(string? Code, string? Name, string? Description, DateTime? FromDate, DateTime? ToDate, int? Status, int LoseWeight, List<ImportPrizeDto>? Prizes, List<ImportEntryDto>? Entries);
 record ImportPrizeDto(string? Name, string? Tier, decimal Value, int Quantity, int Weight);

@@ -19,4 +19,13 @@ public static class Ui
         ClaimStatus.Claimed => ("Đã trao", "success"),
         _ => ("—", "light")
     };
+
+    public static (string text, string css) Voucher(VoucherStatus s) => s switch
+    {
+        VoucherStatus.Active   => ("Khả dụng", "success"),
+        VoucherStatus.Inactive => ("Tạm dừng", "secondary"),
+        VoucherStatus.Expired  => ("Hết hạn", "dark"),
+        VoucherStatus.UsedUp   => ("Hết lượt/điểm", "warning"),
+        _ => (s.ToString(), "secondary")
+    };
 }

@@ -12,6 +12,10 @@ public class AppDbContext : DbContext
     public DbSet<Campaign> Campaigns => Set<Campaign>();
     public DbSet<Prize> Prizes => Set<Prize>();
     public DbSet<Entry> Entries => Set<Entry>();
+    public DbSet<Voucher> Vouchers => Set<Voucher>();
+    public DbSet<VoucherRedemption> VoucherRedemptions => Set<VoucherRedemption>();
+    public DbSet<VoucherProgram> VoucherPrograms => Set<VoucherProgram>();
+    public DbSet<VoucherProgramDtl> VoucherProgramDtls => Set<VoucherProgramDtl>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -35,6 +39,39 @@ public class AppDbContext : DbContext
             e.HasIndex(x => new { x.CampaignId, x.Code }).IsUnique();   // 1 mã chơi 1 lần / chiến dịch
             e.HasOne(x => x.Campaign).WithMany().HasForeignKey(x => x.CampaignId);
             e.HasOne(x => x.Prize).WithMany().HasForeignKey(x => x.PrizeId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Voucher>(e =>
+        {
+            e.HasIndex(x => x.Code).IsUnique();           // Mã voucher công khai — tra cứu xuyên tenant
+            e.Property(x => x.PointTotal).HasPrecision(18, 2);
+            e.Property(x => x.PointRemain).HasPrecision(18, 2);
+            e.Property(x => x.PointLimit).HasPrecision(18, 2);
+            e.Ignore(x => x.IsExpired);
+            e.Ignore(x => x.IsUsable);
+            e.Ignore(x => x.Status);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<VoucherRedemption>(e =>
+        {
+            e.Property(x => x.PointUsed).HasPrecision(18, 2);
+            e.Property(x => x.PointRemainAfter).HasPrecision(18, 2);
+            e.HasOne(x => x.Voucher).WithMany(x => x.Redemptions).HasForeignKey(x => x.VoucherId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<VoucherProgram>(e =>
+        {
+            e.HasIndex(x => x.Code).IsUnique();           // Mã chương trình voucher — duy nhất
+            e.Property(x => x.PointVoucherAllModel).HasPrecision(18, 2);
+            e.Property(x => x.PointUseLimitAllModel).HasPrecision(18, 2);
+            e.Ignore(x => x.IsLiveNow);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<VoucherProgramDtl>(e =>
+        {
+            e.Property(x => x.PointVoucher).HasPrecision(18, 2);
+            e.Property(x => x.PointUseLimit).HasPrecision(18, 2);
+            e.HasOne(x => x.VoucherProgram).WithMany(x => x.Details).HasForeignKey(x => x.VoucherProgramId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

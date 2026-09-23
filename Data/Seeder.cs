@@ -26,13 +26,21 @@ public static class Seeder
                 new Prize { CampaignId = c.Id, Tier = "Giải Ba", Name = "Voucher 200K", Value = 200_000, Quantity = 100, Weight = 40 });
             await db.SaveChangesAsync();
         }
+
+        if (!await db.Vouchers.AnyAsync())
+        {
+            db.Vouchers.AddRange(
+                new Voucher { Code = "GIAM50K", Name = "Giảm 50.000đ", MemberNo = "HV001", PointTotal = 50_000, PointLimit = 50_000, QtyUseLimit = 1, ExpireDate = DateTime.Today.AddMonths(1) },
+                new Voucher { Code = "DIEM200K", Name = "Điểm voucher 200.000đ", MemberNo = "HV002", PointTotal = 200_000, PointLimit = 50_000, QtyUseLimit = 4, ExpireDate = DateTime.Today.AddMonths(2) });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Campaigns", "Prizes", "Entries" };
+        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions" };
         var sql = new List<string> {
             "CREATE TABLE IF NOT EXISTS minipromo.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON minipromo.\"Orgs\" (\"ApiKey\")" };
