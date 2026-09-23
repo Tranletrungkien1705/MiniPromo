@@ -796,4 +796,32 @@ public class DealerDiscountMap : IOrgOwned
     public bool FlagActive { get; set; } = true;           // Trạng thái áp dụng
     public string? Remark { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}// Loại giao dịch điểm của nghiệp vụ tặng điểm mua xe mới — theo nguồn DealPointType (Const.Main.cs).
+// SALES: tặng điểm khi hội viên mua xe mới (điểm bán hàng, không phải điểm dịch vụ).
+public enum CarPurchasePointType { Sales = 0 }
+
+// Nhật ký tặng điểm mua xe mới — port từ Crd_Member_PerformBuyNewCar (Transaction.AddPoint.cs)
+// + bảng Crd_CardTransaction (DealPointType = 'SALES').
+// Khi hội viên mua xe mới, hệ thống cộng số điểm mua xe (PointBuyCar trên Crd_Member) vào thẻ
+// đang APPROVE của hội viên, quy đổi ra tiền theo tỷ lệ UNITPOINTTOMONEY (Mst_ParamSys).
+// Điểm có hạn dùng tới cuối tháng 12 năm kế tiếp (PointExpiryDTime).
+public class CarPurchasePointGrant : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string RefNo { get; set; } = "";                // Số giao dịch (NEW.yyyyMMdd.HHmmss)
+    public string MemberNo { get; set; } = "";             // Mã hội viên
+    public string CardNo { get; set; } = "";               // Số thẻ (thẻ APPROVE của hội viên)
+    public string CardTypeUse { get; set; } = "";          // Hạng thẻ sử dụng
+    public string CardTypeInit { get; set; } = "";         // Hạng thẻ gốc của hội viên
+    public string DealerCode { get; set; } = "";           // DLCode — đại lý ghi nhận
+    public CarPurchasePointType DealPointType { get; set; } = CarPurchasePointType.Sales;
+    public string? PrProgramCode { get; set; }             // Mã chương trình bán xe (nếu có)
+    public decimal PointChTotal { get; set; }              // Điểm mua xe đã tặng (PointBuyCar)
+    public decimal AmountChTotal { get; set; }             // Số tiền quy đổi (PointChTotal × ParamValue)
+    public decimal ParamValue { get; set; } = 1;           // Tỷ lệ quy đổi điểm → tiền (UNITPOINTTOMONEY)
+    public DateTime PointExpiryDTime { get; set; }         // Hạn dùng điểm (cuối tháng 12 năm kế tiếp)
+    public DateTime CreateDate { get; set; } = DateTime.Today;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public string? Remark { get; set; }
 }
