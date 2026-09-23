@@ -162,6 +162,30 @@ public class VoucherProgramController(IVoucherProgramService svc) : Controller
         TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
     }
 
+    // Hoàn tất chương trình (port từ Prm_VoucherNewCar_Finish).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Finish(int id, string? remark)
+    {
+        var (ok, msg) = await svc.FinishAsync(id, remark);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Huỷ chương trình (port từ Prm_VoucherNewCar_Cancel).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Cancel(int id, string? remark)
+    {
+        var (ok, msg) = await svc.CancelAsync(id, remark);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Đối soát số voucher đã phát theo chương trình + model.
+    public async Task<IActionResult> Reconciliation(int? programId)
+    {
+        ViewBag.ProgramId = programId;
+        ViewBag.Programs = await svc.ProgramsAsync();
+        return View(await svc.ReconciliationAsync(programId));
+    }
+
     // Phát voucher cho một xe theo chương trình (tạo Voucher gắn chương trình).
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Issue(int id, string modelCode, DateTime? deliveryDate, DateTime? registrationDate, string? memberNo)

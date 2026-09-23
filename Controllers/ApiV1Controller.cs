@@ -225,6 +225,31 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
         return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
     }
 
+    // Hoàn tất chương trình (port từ Prm_VoucherNewCar_Finish).
+    [HttpPost("voucher-programs/{id:int}/finish")]
+    public async Task<IActionResult> FinishVoucherProgram(int id, [FromBody] RemarkReq? r)
+    {
+        var (ok, msg) = await programs.FinishAsync(id, r?.Remark);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Huỷ chương trình (port từ Prm_VoucherNewCar_Cancel).
+    [HttpPost("voucher-programs/{id:int}/cancel")]
+    public async Task<IActionResult> CancelVoucherProgram(int id, [FromBody] RemarkReq? r)
+    {
+        var (ok, msg) = await programs.CancelAsync(id, r?.Remark);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Đối soát số voucher đã phát theo chương trình + model.
+    [HttpGet("voucher-programs/reconciliation")]
+    public async Task<IActionResult> VoucherReconciliation([FromQuery] int? programId)
+        => Ok((await programs.ReconciliationAsync(programId)).Select(r => new
+        {
+            r.VoucherProgramId, r.ProgramCode, r.ProgramName, r.ModelCode,
+            r.Issued, r.Used, r.Unused, r.PointIssued, r.PointUsed, r.PointRemain
+        }));
+
     // Tính giá trị voucher cho một xe theo chương trình đang hiệu lực (công khai).
     [HttpPost("voucher-program/calc")]
     public async Task<IActionResult> CalcVoucher([FromBody] VoucherCalcReq r)
@@ -259,3 +284,4 @@ public class VoucherProgramReq { public string? Code { get; set; } public string
 public class VoucherProgramDtlReq { public string? ModelCode { get; set; } public decimal PointVoucher { get; set; } public decimal PointUseLimit { get; set; } public string? Remark { get; set; } }
 public class VoucherCalcReq { public string? ModelCode { get; set; } public DateTime? DeliveryDate { get; set; } public DateTime? RegistrationDate { get; set; } }
 public class VoucherIssueReq { public string? ModelCode { get; set; } public DateTime? DeliveryDate { get; set; } public DateTime? RegistrationDate { get; set; } public string? MemberNo { get; set; } }
+public class RemarkReq { public string? Remark { get; set; } }

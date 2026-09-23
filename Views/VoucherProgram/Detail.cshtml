@@ -11,8 +11,8 @@
                 </div>
                 <div class="text-end">
                     @if (Model.Status == VoucherProgramStatus.Pending) { <form asp-action="SetStatus" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="status" value="1" /><button class="btn btn-sm btn-outline-primary">Duyệt</button></form> }
-                    else if (Model.Status == VoucherProgramStatus.Approved) { <form asp-action="SetStatus" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="status" value="2" /><button class="btn btn-sm btn-success">Hoàn tất</button></form> }
-                    @if (Model.Status != VoucherProgramStatus.Cancelled && Model.Status != VoucherProgramStatus.Finished) { <form asp-action="SetStatus" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="status" value="3" /><button class="btn btn-sm btn-outline-dark">Huỷ</button></form> }
+                    else if (Model.Status == VoucherProgramStatus.Approved) { <form asp-action="Finish" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><button class="btn btn-sm btn-success">Hoàn tất</button></form> }
+                    @if (Model.Status == VoucherProgramStatus.Pending || Model.Status == VoucherProgramStatus.Approved) { <form asp-action="Cancel" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><button class="btn btn-sm btn-outline-dark">Huỷ</button></form> }
                 </div>
             </div>
             <div class="row g-2 text-center mt-2">

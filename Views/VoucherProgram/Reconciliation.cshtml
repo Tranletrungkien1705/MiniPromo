@@ -1,0 +1,66 @@
+@model List<VoucherReconRow>
+@{
+    ViewData["Title"] = "Đối soát voucher đã phát";
+    var programs = ViewBag.Programs as List<VoucherProgram> ?? new();
+    int? programId = ViewBag.ProgramId as int?;
+    var totalIssued = Model.Sum(r => r.Issued);
+    var totalUsed = Model.Sum(r => r.Used);
+    var totalPointIssued = Model.Sum(r => r.PointIssued);
+    var totalPointUsed = Model.Sum(r => r.PointUsed);
+    var totalPointRemain = Model.Sum(r => r.PointRemain);
+}
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="fw-bold mb-0">Đối soát voucher đã phát</h5>
+    <a href="/VoucherProgram" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Về chương trình</a>
+</div>
+
+<div class="card mb-3"><div class="card-body">
+    <form method="get" class="row g-2 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label small text-muted mb-0">Lọc theo chương trình</label>
+            <select name="programId" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">— Tất cả chương trình —</option>
+                @foreach (var p in programs)
+                {
+                    <option value="@p.Id" selected="@(programId == p.Id)">@p.Code — @p.Name</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2"><button class="btn btn-sm btn-primary w-100">Lọc</button></div>
+    </form>
+</div></div>
+
+<div class="row g-2 text-center mb-3">
+    <div class="col"><div class="card"><div class="card-body py-2"><div class="text-muted small">Voucher đã phát</div><div class="fw-bold fs-5">@totalIssued</div></div></div></div>
+    <div class="col"><div class="card"><div class="card-body py-2"><div class="text-muted small">Đã dùng</div><div class="fw-bold fs-5">@totalUsed</div></div></div></div>
+    <div class="col"><div class="card"><div class="card-body py-2"><div class="text-muted small">Chưa dùng</div><div class="fw-bold fs-5">@(totalIssued - totalUsed)</div></div></div></div>
+    <div class="col"><div class="card"><div class="card-body py-2"><div class="text-muted small">Điểm đã phát</div><div class="fw-bold" style="color:#db2777">@Ui.Money(totalPointIssued)</div></div></div></div>
+    <div class="col"><div class="card"><div class="card-body py-2"><div class="text-muted small">Điểm đã dùng</div><div class="fw-bold" style="color:#db2777">@Ui.Money(totalPointUsed)</div></div></div></div>
+    <div class="col"><div class="card"><div class="card-body py-2"><div class="text-muted small">Điểm còn lại</div><div class="fw-bold" style="color:#db2777">@Ui.Money(totalPointRemain)</div></div></div></div>
+</div>
+
+<div class="card"><div class="card-body">
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr>
+            <th>Chương trình</th><th>Model</th>
+            <th class="text-center">Đã phát</th><th class="text-center">Đã dùng</th><th class="text-center">Chưa dùng</th>
+            <th class="text-end">Điểm đã phát</th><th class="text-end">Điểm đã dùng</th><th class="text-end">Điểm còn lại</th>
+        </tr></thead>
+        <tbody>
+        @foreach (var r in Model)
+        {
+            <tr>
+                <td class="small"><span class="fw-semibold">@r.ProgramCode</span><div class="text-muted">@r.ProgramName</div></td>
+                <td class="fw-semibold small">@(string.IsNullOrEmpty(r.ModelCode) ? "—" : r.ModelCode)</td>
+                <td class="text-center">@r.Issued</td>
+                <td class="text-center">@r.Used</td>
+                <td class="text-center">@r.Unused</td>
+                <td class="text-end">@Ui.Money(r.PointIssued)</td>
+                <td class="text-end">@Ui.Money(r.PointUsed)</td>
+                <td class="text-end">@Ui.Money(r.PointRemain)</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="8" class="text-center text-muted py-4">Chưa có voucher nào được phát từ chương trình.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

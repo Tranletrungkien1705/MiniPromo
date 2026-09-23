@@ -353,4 +353,138 @@ public class VoucherProgramServiceTests
             Assert.Equal(0, await db.Vouchers.CountAsync());
         }
     }
+
+    // ---- Hoàn tất / Huỷ chương trình (port từ Prm_VoucherNewCar_Finish/Cancel) ----
+
+    private static async Task<VoucherProgram> ApprovedProgram(IVoucherProgramService svc, decimal point = 5_000_000)
+    {
+        var (_, _, id) = await svc.CreateProgramAsync(new VoucherProgram
+        {
+            Code = "PRM" + Guid.NewGuid().ToString("N")[..6].ToUpper(), Name = "CT test",
+            EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(30),
+            ValidityPeriod = 30, QtyDayLimitFDlvDate = 30, FlagAllModel = false
+        });
+        await svc.AddDetailAsync(new VoucherProgramDtl { VoucherProgramId = id, ModelCode = "CITY", PointVoucher = point, PointUseLimit = point });
+        await svc.SetStatusAsync(id, VoucherProgramStatus.Approved);
+        return (await svc.GetProgramAsync(id))!;
+    }
+
+    [Fact]
+    public async Task Finish_FromApproved_Succeeds()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var p = await ApprovedProgram(svc);
+            var (ok, _) = await svc.FinishAsync(p.Id, "hoàn tất");
+            Assert.True(ok);
+            var after = await svc.GetProgramAsync(p.Id);
+            Assert.Equal(VoucherProgramStatus.Finished, after!.Status);
+            Assert.Equal("hoàn tất", after.Remark);
+        }
+    }
+
+    [Fact]
+    public async Task Finish_FromPending_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new VoucherProgram { Name = "X", EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(10) });
+            var (ok, _) = await svc.FinishAsync(id, null);   // đang Pending
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task Finish_DuplicateEffDateStart_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            // Dựng trực tiếp 2 chương trình đã duyệt cùng ngày bắt đầu (bỏ qua guard tạo).
+            var a = new VoucherProgram { Code = "A", Name = "A", EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(30), FlagAllModel = true, PointVoucherAllModel = 1_000_000, Status = VoucherProgramStatus.Finished };
+            var b = new VoucherProgram { Code = "B", Name = "B", EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(30), FlagAllModel = true, PointVoucherAllModel = 1_000_000, Status = VoucherProgramStatus.Approved };
+            db.VoucherPrograms.AddRange(a, b); await db.SaveChangesAsync();
+            var (ok, _) = await svc.FinishAsync(b.Id, null);   // trùng ngày bắt đầu với A → từ chối
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task Finish_TrimsPreviousProgramEndDate()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            // Chương trình trước đang hiệu lực (bắt đầu hôm qua, kết thúc +30).
+            var prev = new VoucherProgram { Code = "PREV", Name = "PREV", EffDateStart = DateTime.Today.AddDays(-1), EffDateEnd = DateTime.Today.AddDays(30), FlagAllModel = true, PointVoucherAllModel = 1_000_000, Status = VoucherProgramStatus.Finished };
+            // Chương trình mới bắt đầu hôm nay → khi hoàn tất phải cắt ngày kết thúc của chương trình trước về hôm qua.
+            var next = new VoucherProgram { Code = "NEXT", Name = "NEXT", EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(30), FlagAllModel = true, PointVoucherAllModel = 1_000_000, Status = VoucherProgramStatus.Approved };
+            db.VoucherPrograms.AddRange(prev, next); await db.SaveChangesAsync();
+            var (ok, _) = await svc.FinishAsync(next.Id, null);
+            Assert.True(ok);
+            var prevAfter = await svc.GetProgramAsync(prev.Id);
+            Assert.Equal(DateTime.Today.AddDays(-1), prevAfter!.EffDateEnd.Date);
+        }
+    }
+
+    [Fact]
+    public async Task Cancel_FromApproved_Succeeds()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var p = await ApprovedProgram(svc);
+            var (ok, _) = await svc.CancelAsync(p.Id, "huỷ");
+            Assert.True(ok);
+            var after = await svc.GetProgramAsync(p.Id);
+            Assert.Equal(VoucherProgramStatus.Cancelled, after!.Status);
+        }
+    }
+
+    [Fact]
+    public async Task Cancel_FromFinished_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var p = await ApprovedProgram(svc);
+            await svc.FinishAsync(p.Id, null);
+            var (ok, _) = await svc.CancelAsync(p.Id, null);   // đã hoàn tất → không huỷ được
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task Reconciliation_GroupsByProgramAndModel()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var p = await FinishedProgram(svc, allModel: false, point: 5_000_000);
+            await svc.IssueAsync("CITY", DateTime.Today, DateTime.Today, "HV001");
+            await svc.IssueAsync("CITY", DateTime.Today, DateTime.Today, "HV002");
+            var rows = await svc.ReconciliationAsync(p.Id);
+            Assert.Single(rows);
+            Assert.Equal("CITY", rows[0].ModelCode);
+            Assert.Equal(2, rows[0].Issued);
+            Assert.Equal(0, rows[0].Used);
+            Assert.Equal(2, rows[0].Unused);
+            Assert.Equal(10_000_000, rows[0].PointIssued);
+            Assert.Equal(10_000_000, rows[0].PointRemain);
+        }
+    }
+
+    [Fact]
+    public async Task Reconciliation_CountsUsedVouchers()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var p = await FinishedProgram(svc, allModel: false, point: 5_000_000);
+            var issue = await svc.IssueAsync("CITY", DateTime.Today, DateTime.Today, "HV001");
+            var voucherSvc = new VoucherService(db);
+            await voucherSvc.RedeemAsync(issue.voucherCode!, null, null);   // dùng hết 1 lượt
+            var rows = await svc.ReconciliationAsync(p.Id);
+            Assert.Single(rows);
+            Assert.Equal(1, rows[0].Issued);
+            Assert.Equal(1, rows[0].Used);
+            Assert.Equal(0, rows[0].Unused);
+            Assert.Equal(5_000_000, rows[0].PointUsed);
+            Assert.Equal(0, rows[0].PointRemain);
+        }
+    }
 }
