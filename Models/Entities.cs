@@ -715,4 +715,47 @@ public class MemberDiscountTransaction : IOrgOwned
     public DateTime CreateDate { get; set; } = DateTime.Today;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public string? Remark { get; set; }
+}// Loại khuyến mại theo — port từ Mst_PromotionMainType của hệ Loyalty.
+// Danh mục "Khuyến mại theo" (PRMMainType): Đơn hàng / Hàng hóa / Hàng hóa và đơn hàng.
+// Mỗi loại gắn một tên hiển thị (PRMMainTypeName) và trạng thái áp dụng (FlagActive).
+public class PromotionMainTypeDef : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";                 // PRMMainType — mã loại khuyến mại theo
+    public string Name { get; set; } = "";                 // PRMMainTypeName — tên loại khuyến mại theo
+    public bool FlagActive { get; set; } = true;           // Trạng thái áp dụng
+    public string? Remark { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public List<PromotionPrmInMain> PrmInMains { get; set; } = new();
+}
+
+// Hình thức khuyến mại — port từ Mst_PromotionPrmType của hệ Loyalty.
+// Danh mục "Hình thức khuyến mại" (PRMPrmType): Tặng hàng / Giảm giá hàng / Giảm giá bán theo SL mua /
+// Giảm giá đơn hàng / Tặng voucher. Mỗi hình thức gắn một tên hiển thị (PRMPrmTypeName) và trạng thái áp dụng.
+public class PromotionPrmTypeDef : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";                 // PRMPrmType — mã hình thức khuyến mại
+    public string Name { get; set; } = "";                 // PRMPrmTypeName — tên hình thức khuyến mại
+    public bool FlagActive { get; set; } = true;           // Trạng thái áp dụng
+    public string? Remark { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public List<PromotionPrmInMain> PrmInMains { get; set; } = new();
+}
+
+// Gắn hình thức khuyến mại vào loại khuyến mại theo — port từ Prm_PrmInMain của hệ Loyalty.
+// Cho biết một hình thức khuyến mại (PRMPrmType) được phép dùng cho loại khuyến mại theo (PRMMainType) nào.
+public class PromotionPrmInMain : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int MainTypeId { get; set; }                    // Loại khuyến mại theo (PRMMainType)
+    public PromotionMainTypeDef? MainType { get; set; }
+    public int PrmTypeId { get; set; }                     // Hình thức khuyến mại (PRMPrmType)
+    public PromotionPrmTypeDef? PrmType { get; set; }
+    public bool FlagActive { get; set; } = true;           // Trạng thái áp dụng
+    public string? Remark { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

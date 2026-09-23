@@ -43,6 +43,9 @@ public class AppDbContext : DbContext
     public DbSet<PolicyMoneyToPoint> PolicyMoneyToPoints => Set<PolicyMoneyToPoint>();
     public DbSet<PolicyMoneyToPointDtl> PolicyMoneyToPointDtls => Set<PolicyMoneyToPointDtl>();
     public DbSet<MemberDiscountTransaction> MemberDiscountTransactions => Set<MemberDiscountTransaction>();
+    public DbSet<PromotionMainTypeDef> PromotionMainTypeDefs => Set<PromotionMainTypeDef>();
+    public DbSet<PromotionPrmTypeDef> PromotionPrmTypeDefs => Set<PromotionPrmTypeDef>();
+    public DbSet<PromotionPrmInMain> PromotionPrmInMains => Set<PromotionPrmInMain>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -276,6 +279,23 @@ public class AppDbContext : DbContext
             e.Property(x => x.PolicyDiscountRate).HasPrecision(18, 2);
             e.Property(x => x.AmountForDC).HasPrecision(18, 2);
             e.Property(x => x.PointChTotal).HasPrecision(18, 2);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PromotionMainTypeDef>(e =>
+        {
+            e.HasIndex(x => x.Code).IsUnique();           // Mã loại khuyến mại theo — duy nhất
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PromotionPrmTypeDef>(e =>
+        {
+            e.HasIndex(x => x.Code).IsUnique();           // Mã hình thức khuyến mại — duy nhất
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PromotionPrmInMain>(e =>
+        {
+            e.HasIndex(x => new { x.MainTypeId, x.PrmTypeId }).IsUnique();   // 1 hình thức / 1 loại khuyến mại theo
+            e.HasOne(x => x.MainType).WithMany(x => x.PrmInMains).HasForeignKey(x => x.MainTypeId);
+            e.HasOne(x => x.PrmType).WithMany(x => x.PrmInMains).HasForeignKey(x => x.PrmTypeId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

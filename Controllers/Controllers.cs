@@ -787,4 +787,67 @@ public class MemberDiscountController(IMemberDiscountService svc) : Controller
         ViewBag.CardTypeApply = cardTypeApply;
         return View(await svc.ReconciliationAsync(cardTypeApply));
     }
+}// Danh mục loại khuyến mại (port từ Mst_PromotionMainType + Mst_PromotionPrmType + Prm_PrmInMain).
+public class PromotionTypeController(IPromotionTypeService svc) : Controller
+{
+    public async Task<IActionResult> Index()
+    {
+        ViewBag.MainTypes = await svc.MainTypesAsync();
+        ViewBag.PrmTypes = await svc.PrmTypesAsync();
+        return View(await svc.MappingsAsync());
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateMainType(string name, string? code, string? remark)
+    {
+        var (ok, msg, _) = await svc.CreateMainTypeAsync(new PromotionMainTypeDef { Name = name ?? "", Code = (code ?? "").Trim().ToUpper(), Remark = remark });
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetMainTypeActive(int id, bool active)
+    {
+        var (ok, msg) = await svc.SetMainTypeActiveAsync(id, active);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreatePrmType(string name, string? code, string? remark)
+    {
+        var (ok, msg, _) = await svc.CreatePrmTypeAsync(new PromotionPrmTypeDef { Name = name ?? "", Code = (code ?? "").Trim().ToUpper(), Remark = remark });
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetPrmTypeActive(int id, bool active)
+    {
+        var (ok, msg) = await svc.SetPrmTypeActiveAsync(id, active);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddMapping(int mainTypeId, int prmTypeId, string? remark)
+    {
+        var (ok, msg, _) = await svc.AddMappingAsync(mainTypeId, prmTypeId, remark);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetMappingActive(int id, bool active)
+    {
+        var (ok, msg) = await svc.SetMappingActiveAsync(id, active);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Index));
+    }
+
+    // Kiểm tra một hình thức khuyến mại có được phép dùng cho một loại khuyến mại theo hay không.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Check(string mainTypeCode, string prmTypeCode)
+    {
+        var o = await svc.CheckPrmInMainAsync(mainTypeCode ?? "", prmTypeCode ?? "");
+        TempData[o.ok ? "Success" : "Error"] = o.msg;
+        return RedirectToAction(nameof(Index));
+    }
 }

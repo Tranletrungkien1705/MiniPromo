@@ -1,0 +1,140 @@
+@model List<PromotionPrmInMain>
+@{
+    ViewData["Title"] = "Loại khuyến mại";
+    var mainTypes = (List<PromotionMainTypeDef>)ViewBag.MainTypes;
+    var prmTypes = (List<PromotionPrmTypeDef>)ViewBag.PrmTypes;
+}
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="fw-bold mb-0">Danh mục loại khuyến mại</h5>
+</div>
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Khuyến mại theo</h6>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Mã</th><th>Tên</th><th class="text-center">Số hình thức</th><th>Trạng thái</th><th class="text-end">Thao tác</th></tr></thead>
+                <tbody>
+                @foreach (var t in mainTypes)
+                {
+                    <tr>
+                        <td class="fw-semibold small">@t.Code</td>
+                        <td>@t.Name</td>
+                        <td class="text-center small">@t.PrmInMains.Count</td>
+                        <td><span class="badge bg-@(t.FlagActive ? "success" : "secondary")">@(t.FlagActive ? "Đang bật" : "Tạm dừng")</span></td>
+                        <td class="text-end">
+                            <form asp-action="SetMainTypeActive" method="post" class="d-inline">@Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@t.Id" />
+                                <input type="hidden" name="active" value="@((!t.FlagActive).ToString().ToLower())" />
+                                <button class="btn btn-sm btn-outline-primary">@(t.FlagActive ? "Tạm dừng" : "Bật")</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (mainTypes.Count == 0) { <tr><td colspan="5" class="text-center text-muted py-4">Chưa có loại khuyến mại theo.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Hình thức khuyến mại</h6>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Mã</th><th>Tên</th><th class="text-center">Số loại KM theo</th><th>Trạng thái</th><th class="text-end">Thao tác</th></tr></thead>
+                <tbody>
+                @foreach (var t in prmTypes)
+                {
+                    <tr>
+                        <td class="fw-semibold small">@t.Code</td>
+                        <td>@t.Name</td>
+                        <td class="text-center small">@t.PrmInMains.Count</td>
+                        <td><span class="badge bg-@(t.FlagActive ? "success" : "secondary")">@(t.FlagActive ? "Đang bật" : "Tạm dừng")</span></td>
+                        <td class="text-end">
+                            <form asp-action="SetPrmTypeActive" method="post" class="d-inline">@Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@t.Id" />
+                                <input type="hidden" name="active" value="@((!t.FlagActive).ToString().ToLower())" />
+                                <button class="btn btn-sm btn-outline-primary">@(t.FlagActive ? "Tạm dừng" : "Bật")</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (prmTypes.Count == 0) { <tr><td colspan="5" class="text-center text-muted py-4">Chưa có hình thức khuyến mại.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3">Hình thức được phép dùng cho loại khuyến mại theo</h6>
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Loại khuyến mại theo</th><th>Hình thức khuyến mại</th><th>Trạng thái</th><th class="text-end">Thao tác</th></tr></thead>
+                <tbody>
+                @foreach (var m in Model)
+                {
+                    <tr>
+                        <td class="small"><span class="fw-semibold">@m.MainType?.Code</span> — @m.MainType?.Name</td>
+                        <td class="small"><span class="fw-semibold">@m.PrmType?.Code</span> — @m.PrmType?.Name</td>
+                        <td><span class="badge bg-@(m.FlagActive ? "success" : "secondary")">@(m.FlagActive ? "Đang bật" : "Tạm dừng")</span></td>
+                        <td class="text-end">
+                            <form asp-action="SetMappingActive" method="post" class="d-inline">@Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@m.Id" />
+                                <input type="hidden" name="active" value="@((!m.FlagActive).ToString().ToLower())" />
+                                <button class="btn btn-sm btn-outline-primary">@(m.FlagActive ? "Tạm dừng" : "Bật")</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0) { <tr><td colspan="4" class="text-center text-muted py-4">Chưa có dòng gắn hình thức.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Thêm loại khuyến mại theo</h6>
+            <form asp-action="CreateMainType" method="post">@Html.AntiForgeryToken()
+                <div class="mb-2"><input name="name" class="form-control form-control-sm" placeholder="Tên loại khuyến mại theo *" required /></div>
+                <div class="mb-2"><input name="code" class="form-control form-control-sm text-uppercase" placeholder="Mã (tự sinh)" /></div>
+                <div class="mb-3"><textarea name="remark" class="form-control form-control-sm" rows="2" placeholder="Ghi chú"></textarea></div>
+                <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Thêm</button>
+            </form>
+        </div></div>
+
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Thêm hình thức khuyến mại</h6>
+            <form asp-action="CreatePrmType" method="post">@Html.AntiForgeryToken()
+                <div class="mb-2"><input name="name" class="form-control form-control-sm" placeholder="Tên hình thức khuyến mại *" required /></div>
+                <div class="mb-2"><input name="code" class="form-control form-control-sm text-uppercase" placeholder="Mã (tự sinh)" /></div>
+                <div class="mb-3"><textarea name="remark" class="form-control form-control-sm" rows="2" placeholder="Ghi chú"></textarea></div>
+                <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Thêm</button>
+            </form>
+        </div></div>
+
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Gắn hình thức vào loại khuyến mại theo</h6>
+            <form asp-action="AddMapping" method="post">@Html.AntiForgeryToken()
+                <div class="mb-2">
+                    <select name="mainTypeId" class="form-select form-select-sm" required>
+                        <option value="">— Loại khuyến mại theo —</option>
+                        @foreach (var t in mainTypes) { <option value="@t.Id">@t.Code — @t.Name</option> }
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <select name="prmTypeId" class="form-select form-select-sm" required>
+                        <option value="">— Hình thức khuyến mại —</option>
+                        @foreach (var t in prmTypes) { <option value="@t.Id">@t.Code — @t.Name</option> }
+                    </select>
+                </div>
+                <div class="mb-3"><textarea name="remark" class="form-control form-control-sm" rows="2" placeholder="Ghi chú"></textarea></div>
+                <button class="btn btn-primary w-100"><i class="bi bi-link-45deg me-1"></i>Gắn</button>
+            </form>
+        </div></div>
+
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3">Kiểm tra hình thức hợp lệ</h6>
+            <form asp-action="Check" method="post">@Html.AntiForgeryToken()
+                <div class="mb-2"><input name="mainTypeCode" class="form-control form-control-sm text-uppercase" placeholder="Mã loại khuyến mại theo *" required /></div>
+                <div class="mb-2"><input name="prmTypeCode" class="form-control form-control-sm text-uppercase" placeholder="Mã hình thức khuyến mại *" required /></div>
+                <button class="btn btn-outline-primary w-100"><i class="bi bi-check2-circle me-1"></i>Kiểm tra</button>
+            </form>
+        </div></div>
+    </div>
+</div>

@@ -12,7 +12,7 @@ namespace MiniPromo.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Produces("application/json")]
-public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IIssueVoucherService issueVouchers, IParamPromotionService paramPromotions, IRankPolicyService rankPolicies, IPolicyMoneyToPointService moneyToPoints, IMemberDiscountService memberDiscounts, ICache cache, ITenantContext tenant) : ControllerBase
+public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IIssueVoucherService issueVouchers, IParamPromotionService paramPromotions, IRankPolicyService rankPolicies, IPolicyMoneyToPointService moneyToPoints, IMemberDiscountService memberDiscounts, IPromotionTypeService promotionTypes, ICache cache, ITenantContext tenant) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard()
@@ -1104,6 +1104,81 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
         return o.ok ? Ok(new { ok = o.ok, msg = o.msg, id = o.id, amountForDC = o.amountForDC, discount = o.discount })
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
+
+    // ---- Danh mục loại khuyến mại (port từ Mst_PromotionMainType + Mst_PromotionPrmType + Prm_PrmInMain) ----
+    [HttpGet("promotion-main-types")]
+    public async Task<IActionResult> PromotionMainTypes()
+        => Ok((await promotionTypes.MainTypesAsync()).Select(t => new
+        {
+            t.Id, t.Code, t.Name, t.FlagActive, activeText = t.FlagActive ? "Đang bật" : "Tạm dừng", t.Remark, prmCount = t.PrmInMains.Count
+        }));
+
+    [HttpPost("promotion-main-types")]
+    public async Task<IActionResult> CreatePromotionMainType([FromBody] PromotionTypeReq r)
+    {
+        var (ok, msg, id) = await promotionTypes.CreateMainTypeAsync(new PromotionMainTypeDef { Code = r.Code ?? "", Name = r.Name, Remark = r.Remark });
+        return ok ? Ok(new { id }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("promotion-main-types/{id:int}/active")]
+    public async Task<IActionResult> SetPromotionMainTypeActive(int id, [FromBody] ActiveReq r)
+    {
+        var (ok, msg) = await promotionTypes.SetMainTypeActiveAsync(id, r.Active);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    [HttpGet("promotion-prm-types")]
+    public async Task<IActionResult> PromotionPrmTypes()
+        => Ok((await promotionTypes.PrmTypesAsync()).Select(t => new
+        {
+            t.Id, t.Code, t.Name, t.FlagActive, activeText = t.FlagActive ? "Đang bật" : "Tạm dừng", t.Remark, mainCount = t.PrmInMains.Count
+        }));
+
+    [HttpPost("promotion-prm-types")]
+    public async Task<IActionResult> CreatePromotionPrmType([FromBody] PromotionTypeReq r)
+    {
+        var (ok, msg, id) = await promotionTypes.CreatePrmTypeAsync(new PromotionPrmTypeDef { Code = r.Code ?? "", Name = r.Name, Remark = r.Remark });
+        return ok ? Ok(new { id }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("promotion-prm-types/{id:int}/active")]
+    public async Task<IActionResult> SetPromotionPrmTypeActive(int id, [FromBody] ActiveReq r)
+    {
+        var (ok, msg) = await promotionTypes.SetPrmTypeActiveAsync(id, r.Active);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    [HttpGet("promotion-prm-in-mains")]
+    public async Task<IActionResult> PromotionPrmInMains()
+        => Ok((await promotionTypes.MappingsAsync()).Select(m => new
+        {
+            m.Id, m.MainTypeId, mainTypeCode = m.MainType?.Code, mainTypeName = m.MainType?.Name,
+            m.PrmTypeId, prmTypeCode = m.PrmType?.Code, prmTypeName = m.PrmType?.Name,
+            m.FlagActive, activeText = m.FlagActive ? "Đang bật" : "Tạm dừng", m.Remark
+        }));
+
+    [HttpPost("promotion-prm-in-mains")]
+    public async Task<IActionResult> AddPromotionPrmInMain([FromBody] PromotionPrmInMainReq r)
+    {
+        var (ok, msg, id) = await promotionTypes.AddMappingAsync(r.MainTypeId, r.PrmTypeId, r.Remark);
+        return ok ? Ok(new { id }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("promotion-prm-in-mains/{id:int}/active")]
+    public async Task<IActionResult> SetPromotionPrmInMainActive(int id, [FromBody] ActiveReq r)
+    {
+        var (ok, msg) = await promotionTypes.SetMappingActiveAsync(id, r.Active);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Kiểm tra một hình thức khuyến mại có được phép dùng cho một loại khuyến mại theo hay không (công khai).
+    [HttpPost("promotion-type/check")]
+    public async Task<IActionResult> CheckPromotionType([FromBody] PrmInMainReq r)
+    {
+        var o = await promotionTypes.CheckPrmInMainAsync(r.MainTypeCode ?? "", r.PrmTypeCode ?? "");
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, mainTypeCode = o.mainTypeCode, prmTypeCode = o.prmTypeCode })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
 }
 
 public record DashDto(int Campaigns, int Running, int TotalPlays, int TotalWins, decimal ValueAwarded, List<TopDto> Top);
@@ -1152,6 +1227,9 @@ public class IssueUseReq { public string? VoucherNo { get; set; } public string?
 public class ParamPromotionTypeReq { public string? Code { get; set; } public string Name { get; set; } = ""; public string? Remark { get; set; } }
 public class ParamPromotionReq { public string? ProgramCode { get; set; } public string? ProgramName { get; set; } public int ParamPromotionTypeId { get; set; } public int QtyDateBefore { get; set; } public int QtyDateAfter { get; set; } public string? Remark { get; set; } }
 public class ParamWindowReq { public string? ProgramCode { get; set; } public string? TypeCode { get; set; } public DateTime? Anchor { get; set; } }
+public class PromotionTypeReq { public string? Code { get; set; } public string Name { get; set; } = ""; public string? Remark { get; set; } }
+public class PromotionPrmInMainReq { public int MainTypeId { get; set; } public int PrmTypeId { get; set; } public string? Remark { get; set; } }
+public class PrmInMainReq { public string? MainTypeCode { get; set; } public string? PrmTypeCode { get; set; } }
 public class RankPolicyReq { public string? Code { get; set; } public string? CardType { get; set; } public int Value { get; set; } public decimal PointUpBegin { get; set; } public decimal PointUpEnd { get; set; } public int QtyVisitUpBegin { get; set; } public int QtyVisitUpEnd { get; set; } public decimal PointKeepBegin { get; set; } public decimal PointKeepEnd { get; set; } public int QtyVisitKeepBegin { get; set; } public int QtyVisitKeepEnd { get; set; } public int QtyMonth { get; set; } = 12; public string? Remark { get; set; } }
 public class RankEvalReq { public string? CardType { get; set; } public decimal Point { get; set; } public int QtyVisit { get; set; } }
 public class PolicyMoneyToPointReq { public string? Code { get; set; } public string Name { get; set; } = ""; public DateTime EffDateStart { get; set; } public DateTime EffDateEnd { get; set; } public string? Remark { get; set; } }

@@ -2286,4 +2286,149 @@ public class MemberDiscountServiceTests
             Assert.Equal(300_000, plat.Discount);
         }
     }
+}/// <summary>Test danh mục loại khuyến mại: chặn trùng mã, bật/tạm dừng, gắn hình thức vào loại khuyến mại theo,
+/// kiểm tra hình thức hợp lệ (loại/hình thức/dòng gắn đều phải đang bật).</summary>
+public class PromotionTypeServiceTests
+{
+    private static (AppDbContext db, IPromotionTypeService svc, SqliteConnection conn) NewSvc()
+    {
+        var conn = new SqliteConnection("DataSource=:memory:"); conn.Open();
+        var opt = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conn).Options;
+        var db = new AppDbContext(opt, new TenantContext { OrgId = TenantContext.DefaultOrgId });
+        db.Database.EnsureCreated();
+        return (db, new PromotionTypeService(db), conn);
+    }
+
+    // Tạo 1 loại khuyến mại theo + 1 hình thức khuyến mại + gắn chúng lại với nhau.
+    private static async Task<(int mainId, int prmId, int mapId)> SeedOne(IPromotionTypeService svc)
+    {
+        var (_, _, mainId) = await svc.CreateMainTypeAsync(new PromotionMainTypeDef { Code = "PRODUCT", Name = "Hàng hóa" });
+        var (_, _, prmId) = await svc.CreatePrmTypeAsync(new PromotionPrmTypeDef { Code = "PRODUCTUPDC", Name = "Giảm giá hàng" });
+        var (_, _, mapId) = await svc.AddMappingAsync(mainId, prmId, null);
+        return (mainId, prmId, mapId);
+    }
+
+    [Fact]
+    public async Task CreateMainType_RequiresName()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            Assert.False((await svc.CreateMainTypeAsync(new PromotionMainTypeDef { Name = "" })).ok);
+        }
+    }
+
+    [Fact]
+    public async Task CreateMainType_DuplicateCode_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.CreateMainTypeAsync(new PromotionMainTypeDef { Code = "ORDER", Name = "Đơn hàng" });
+            var o = await svc.CreateMainTypeAsync(new PromotionMainTypeDef { Code = "ORDER", Name = "Đơn hàng 2" });
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task CreatePrmType_DuplicateCode_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.CreatePrmTypeAsync(new PromotionPrmTypeDef { Code = "VOUCHER", Name = "Tặng voucher" });
+            var o = await svc.CreatePrmTypeAsync(new PromotionPrmTypeDef { Code = "VOUCHER", Name = "Tặng voucher 2" });
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task AddMapping_Duplicate_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (mainId, prmId, _) = await SeedOne(svc);
+            var o = await svc.AddMappingAsync(mainId, prmId, null);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task AddMapping_UnknownMainType_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, prmId) = await svc.CreatePrmTypeAsync(new PromotionPrmTypeDef { Code = "ORDER", Name = "Giảm giá đơn hàng" });
+            var o = await svc.AddMappingAsync(999, prmId, null);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Check_Allowed_WhenAllActive()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SeedOne(svc);
+            var o = await svc.CheckPrmInMainAsync("PRODUCT", "PRODUCTUPDC");
+            Assert.True(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Check_Rejected_WhenMainTypeInactive()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (mainId, _, _) = await SeedOne(svc);
+            await svc.SetMainTypeActiveAsync(mainId, false);
+            var o = await svc.CheckPrmInMainAsync("PRODUCT", "PRODUCTUPDC");
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Check_Rejected_WhenPrmTypeInactive()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, prmId, _) = await SeedOne(svc);
+            await svc.SetPrmTypeActiveAsync(prmId, false);
+            var o = await svc.CheckPrmInMainAsync("PRODUCT", "PRODUCTUPDC");
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Check_Rejected_WhenMappingInactive()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, mapId) = await SeedOne(svc);
+            await svc.SetMappingActiveAsync(mapId, false);
+            var o = await svc.CheckPrmInMainAsync("PRODUCT", "PRODUCTUPDC");
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Check_Rejected_WhenNotMapped()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.CreateMainTypeAsync(new PromotionMainTypeDef { Code = "ORDER", Name = "Đơn hàng" });
+            await svc.CreatePrmTypeAsync(new PromotionPrmTypeDef { Code = "PRODUCTUPDC", Name = "Giảm giá hàng" });
+            // Chưa gắn → không được phép dùng.
+            var o = await svc.CheckPrmInMainAsync("ORDER", "PRODUCTUPDC");
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Check_Rejected_WhenUnknownCode()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SeedOne(svc);
+            Assert.False((await svc.CheckPrmInMainAsync("NOPE", "PRODUCTUPDC")).ok);
+            Assert.False((await svc.CheckPrmInMainAsync("PRODUCT", "NOPE")).ok);
+        }
+    }
 }

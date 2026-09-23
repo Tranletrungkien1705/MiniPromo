@@ -207,13 +207,53 @@ public static class Seeder
                 });
             await db.SaveChangesAsync();
         }
+
+        if (!await db.PromotionMainTypeDefs.AnyAsync())
+        {
+            // Danh mục "Khuyến mại theo" — theo nguồn Mst_PromotionMainType.
+            db.PromotionMainTypeDefs.AddRange(
+                new PromotionMainTypeDef { Code = "ORDER", Name = "Đơn hàng", Remark = "Khuyến mại áp dụng cho toàn đơn hàng." },
+                new PromotionMainTypeDef { Code = "PRODUCT", Name = "Hàng hóa", Remark = "Khuyến mại áp dụng cho từng mặt hàng." },
+                new PromotionMainTypeDef { Code = "PRODUCTANDORDER", Name = "Hàng hóa và đơn hàng", Remark = "Khuyến mại áp dụng cho cả hàng hóa và đơn hàng." });
+            await db.SaveChangesAsync();
+        }
+
+        if (!await db.PromotionPrmTypeDefs.AnyAsync())
+        {
+            // Danh mục "Hình thức khuyến mại" — theo nguồn Mst_PromotionPrmType.
+            db.PromotionPrmTypeDefs.AddRange(
+                new PromotionPrmTypeDef { Code = "ORDER", Name = "Giảm giá đơn hàng" },
+                new PromotionPrmTypeDef { Code = "PRODUCT", Name = "Tặng hàng" },
+                new PromotionPrmTypeDef { Code = "PRODUCTUPDC", Name = "Giảm giá hàng" },
+                new PromotionPrmTypeDef { Code = "PRODUCTUPDCBYQTY", Name = "Giảm giá bán theo SL mua" },
+                new PromotionPrmTypeDef { Code = "VOUCHER", Name = "Tặng voucher" });
+            await db.SaveChangesAsync();
+        }
+
+        if (!await db.PromotionPrmInMains.AnyAsync())
+        {
+            // Gắn hình thức khuyến mại vào loại khuyến mại theo — theo nguồn Prm_PrmInMain.
+            var mains = await db.PromotionMainTypeDefs.ToListAsync();
+            var prms = await db.PromotionPrmTypeDefs.ToListAsync();
+            int Mid(string c) => mains.First(t => t.Code == c).Id;
+            int Pid(string c) => prms.First(t => t.Code == c).Id;
+            db.PromotionPrmInMains.AddRange(
+                new PromotionPrmInMain { MainTypeId = Mid("ORDER"), PrmTypeId = Pid("ORDER") },
+                new PromotionPrmInMain { MainTypeId = Mid("ORDER"), PrmTypeId = Pid("VOUCHER") },
+                new PromotionPrmInMain { MainTypeId = Mid("PRODUCT"), PrmTypeId = Pid("PRODUCT") },
+                new PromotionPrmInMain { MainTypeId = Mid("PRODUCT"), PrmTypeId = Pid("PRODUCTUPDC") },
+                new PromotionPrmInMain { MainTypeId = Mid("PRODUCT"), PrmTypeId = Pid("PRODUCTUPDCBYQTY") },
+                new PromotionPrmInMain { MainTypeId = Mid("PRODUCTANDORDER"), PrmTypeId = Pid("PRODUCTUPDC") },
+                new PromotionPrmInMain { MainTypeId = Mid("PRODUCTANDORDER"), PrmTypeId = Pid("ORDER") });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "PromotionProductScopes", "CarRecommends", "CarRecommendDtls", "CardPromotionPrograms", "CardPromotionProgramDtls", "CardPromotionProgramSpecs", "CardPromotionUsages", "BirthdayPolicies", "BirthdayPolicyDtls", "BirthdayGrants", "IssueVouchers", "IssueVoucherDtls", "IssueVoucherScopes", "IssueVoucherProducts", "IssueVoucherPrices", "RankPolicies", "PolicyMoneyToPoints", "PolicyMoneyToPointDtls", "MemberDiscountTransactions" };
+        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "PromotionProductScopes", "CarRecommends", "CarRecommendDtls", "CardPromotionPrograms", "CardPromotionProgramDtls", "CardPromotionProgramSpecs", "CardPromotionUsages", "BirthdayPolicies", "BirthdayPolicyDtls", "BirthdayGrants", "IssueVouchers", "IssueVoucherDtls", "IssueVoucherScopes", "IssueVoucherProducts", "IssueVoucherPrices", "RankPolicies", "PolicyMoneyToPoints", "PolicyMoneyToPointDtls", "MemberDiscountTransactions", "PromotionMainTypeDefs", "PromotionPrmTypeDefs", "PromotionPrmInMains" };
         var sql = new List<string> {
             "CREATE TABLE IF NOT EXISTS minipromo.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON minipromo.\"Orgs\" (\"ApiKey\")" };
