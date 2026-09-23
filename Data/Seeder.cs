@@ -265,13 +265,22 @@ public static class Seeder
                 new DealerDiscountMap { DealerCode = "DLCP01", DiscountCode = "GIAM50K", FlagActive = true, Remark = "Đại lý DLCP01 dùng mã GIAM50K." });
             await db.SaveChangesAsync();
         }
+
+        if (!await db.VoucherIdSequences.AnyAsync())
+        {
+            // Mã voucher mẫu — theo nguồn Seq_VoucherID (base36 + checksum).
+            db.VoucherIdSequences.AddRange(
+                new VoucherIdSequence { Seq = 1, VoucherNo = "017YAB00001S", VerGen = "01", Remark = "Mã voucher mẫu 1." },
+                new VoucherIdSequence { Seq = 2, VoucherNo = "017YAB00002T", VerGen = "01", Remark = "Mã voucher mẫu 2." });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "PromotionProductScopes", "CarRecommends", "CarRecommendDtls", "CardPromotionPrograms", "CardPromotionProgramDtls", "CardPromotionProgramSpecs", "CardPromotionUsages", "BirthdayPolicies", "BirthdayPolicyDtls", "BirthdayGrants", "IssueVouchers", "IssueVoucherDtls", "IssueVoucherScopes", "IssueVoucherProducts", "IssueVoucherPrices", "RankPolicies", "PolicyMoneyToPoints", "PolicyMoneyToPointDtls", "MemberDiscountTransactions", "PromotionMainTypeDefs", "PromotionPrmTypeDefs", "PromotionPrmInMains", "DiscountCodes", "DealerDiscountMaps" };
+        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "PromotionProductScopes", "CarRecommends", "CarRecommendDtls", "CardPromotionPrograms", "CardPromotionProgramDtls", "CardPromotionProgramSpecs", "CardPromotionUsages", "BirthdayPolicies", "BirthdayPolicyDtls", "BirthdayGrants", "IssueVouchers", "IssueVoucherDtls", "IssueVoucherScopes", "IssueVoucherProducts", "IssueVoucherPrices", "RankPolicies", "PolicyMoneyToPoints", "PolicyMoneyToPointDtls", "MemberDiscountTransactions", "PromotionMainTypeDefs", "PromotionPrmTypeDefs", "PromotionPrmInMains", "DiscountCodes", "DealerDiscountMaps", "VoucherIdSequences" };
         var sql = new List<string> {
             "CREATE TABLE IF NOT EXISTS minipromo.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON minipromo.\"Orgs\" (\"ApiKey\")" };

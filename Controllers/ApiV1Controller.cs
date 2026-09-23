@@ -12,7 +12,7 @@ namespace MiniPromo.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Produces("application/json")]
-public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IIssueVoucherService issueVouchers, IParamPromotionService paramPromotions, IRankPolicyService rankPolicies, IPolicyMoneyToPointService moneyToPoints, IMemberDiscountService memberDiscounts, IPromotionTypeService promotionTypes, IDiscountCodeService discountCodes, ICache cache, ITenantContext tenant) : ControllerBase
+public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IIssueVoucherService issueVouchers, IParamPromotionService paramPromotions, IRankPolicyService rankPolicies, IPolicyMoneyToPointService moneyToPoints, IMemberDiscountService memberDiscounts, IPromotionTypeService promotionTypes, IDiscountCodeService discountCodes, IVoucherIdService voucherIds, ICache cache, ITenantContext tenant) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard()
@@ -1262,6 +1262,31 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
         return o.ok ? Ok(new { ok = o.ok, msg = o.msg, code = o.code, discount = o.discount, orderAmount = o.orderAmount, payable = o.payable, remainQty = o.remainQty })
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
+
+    // ---- Sinh mã voucher theo hệ cơ số 36 + checksum (port từ Seq_VoucherID + Mst_VoucherID) ----
+    [HttpGet("voucher-id-sequences")]
+    public async Task<IActionResult> VoucherIdSequences()
+        => Ok((await voucherIds.SequencesAsync()).Select(s => new
+        {
+            s.Id, s.Seq, s.VoucherNo, s.VerGen, s.GeneratedAt, s.Remark
+        }));
+
+    // Sinh một hoặc nhiều mã voucher mới (công khai).
+    [HttpPost("voucher-id/generate")]
+    public async Task<IActionResult> GenerateVoucherId([FromBody] VoucherIdGenReq r)
+    {
+        var o = await voucherIds.GenerateAsync(r.Amount, r.At);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, codes = o.codes, lastSeq = o.lastSeq })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
+
+    // Kiểm tra định dạng + checksum của một mã voucher (công khai).
+    [HttpPost("voucher-id/validate")]
+    public IActionResult ValidateVoucherId([FromBody] VoucherIdValidateReq r)
+    {
+        var o = voucherIds.Validate(r.VoucherNo ?? "");
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg }) : BadRequest(new { ok = o.ok, error = o.msg });
+    }
 }
 
 public record DashDto(int Campaigns, int Running, int TotalPlays, int TotalWins, decimal ValueAwarded, List<TopDto> Top);
@@ -1317,6 +1342,8 @@ public class DiscountCodeReq { public string? Code { get; set; } public string? 
 public class DealerDiscountMapReq { public string? DealerCode { get; set; } public string? DiscountCode { get; set; } public string? Remark { get; set; } }
 public class DiscountCheckReq { public string? Code { get; set; } public decimal OrderAmount { get; set; } public DateTime? At { get; set; } }
 public class DiscountApplyReq { public string? Code { get; set; } public decimal OrderAmount { get; set; } public DateTime? At { get; set; } }
+public class VoucherIdGenReq { public int Amount { get; set; } = 1; public DateTime? At { get; set; } }
+public class VoucherIdValidateReq { public string? VoucherNo { get; set; } }
 public class RankPolicyReq { public string? Code { get; set; } public string? CardType { get; set; } public int Value { get; set; } public decimal PointUpBegin { get; set; } public decimal PointUpEnd { get; set; } public int QtyVisitUpBegin { get; set; } public int QtyVisitUpEnd { get; set; } public decimal PointKeepBegin { get; set; } public decimal PointKeepEnd { get; set; } public int QtyVisitKeepBegin { get; set; } public int QtyVisitKeepEnd { get; set; } public int QtyMonth { get; set; } = 12; public string? Remark { get; set; } }
 public class RankEvalReq { public string? CardType { get; set; } public decimal Point { get; set; } public int QtyVisit { get; set; } }
 public class PolicyMoneyToPointReq { public string? Code { get; set; } public string Name { get; set; } = ""; public DateTime EffDateStart { get; set; } public DateTime EffDateEnd { get; set; } public string? Remark { get; set; } }

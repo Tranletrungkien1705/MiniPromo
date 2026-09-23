@@ -1,0 +1,48 @@
+@model List<VoucherIdSequence>
+@{ ViewData["Title"] = "Sinh mã voucher"; }
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="fw-bold mb-0">Sinh mã voucher</h5>
+    <span class="text-muted small">Mã 12 ký tự base36 (0-9, A-Z) + checksum — theo nguồn Seq_VoucherID</span>
+</div>
+<div class="row g-3">
+    <div class="col-lg-8"><div class="card"><div class="card-body">
+        <table class="table table-hover align-middle mb-0">
+            <thead><tr><th class="text-end">STT</th><th>Mã voucher</th><th>Phiên bản</th><th>Thời điểm sinh</th></tr></thead>
+            <tbody>
+            @foreach (var s in Model)
+            {
+                <tr>
+                    <td class="text-end small text-muted">@s.Seq</td>
+                    <td class="fw-semibold font-monospace">@s.VoucherNo</td>
+                    <td class="small">@s.VerGen</td>
+                    <td class="small">@s.GeneratedAt.ToString("dd/MM/yyyy HH:mm")</td>
+                </tr>
+            }
+            @if (Model.Count == 0) { <tr><td colspan="4" class="text-center text-muted py-4">Chưa sinh mã voucher nào.</td></tr> }
+            </tbody>
+        </table>
+    </div></div></div>
+    <div class="col-lg-4">
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Sinh mã voucher</h6>
+            <form asp-action="Generate" method="post">@Html.AntiForgeryToken()
+                <div class="mb-2">
+                    <label class="form-label small text-muted">Số lượng mã cần sinh</label>
+                    <input name="amount" type="number" min="1" max="1000" value="1" class="form-control form-control-sm" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small text-muted">Mốc thời gian (để trống = hiện tại)</label>
+                    <input name="at" type="datetime-local" class="form-control form-control-sm" />
+                </div>
+                <button class="btn btn-primary w-100"><i class="bi bi-upc-scan me-1"></i>Sinh mã</button>
+            </form>
+        </div></div>
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3">Kiểm tra mã voucher</h6>
+            <form asp-action="Validate" method="post">@Html.AntiForgeryToken()
+                <div class="mb-2"><input name="voucherNo" class="form-control form-control-sm text-uppercase font-monospace" placeholder="Mã voucher *" required /></div>
+                <button class="btn btn-outline-primary w-100"><i class="bi bi-check2-circle me-1"></i>Kiểm tra</button>
+            </form>
+        </div></div>
+    </div>
+</div>

@@ -824,4 +824,18 @@ public class CarPurchasePointGrant : IOrgOwned
     public DateTime CreateDate { get; set; } = DateTime.Today;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public string? Remark { get; set; }
+}// Nhật ký sinh mã voucher — port từ Seq_VoucherID + Mst_VoucherID của hệ Loyalty.
+// Mỗi lần sinh mã, hệ thống cấp một số thứ tự tăng dần (Seq) rồi mã hoá thành mã voucher
+// theo hệ cơ số 36 (0-9, A-Z): {VerGen}{Năm36}{Tháng36}{Ngày36}{NgẫuNhiên36}{Checksum36} (12 ký tự).
+// Checksum = tổng giá trị các ký tự base36 của 11 ký tự đầu, lấy dư 36, mã hoá base36 1 ký tự.
+// Nguồn: Seq.cs (Seq_VoucherID_GetByAmount) + Utils.cs (CMyBase36).
+public class VoucherIdSequence : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public long Seq { get; set; }                          // Số thứ tự tăng dần (nguồn Seq_VoucherID.AutoID)
+    public string VoucherNo { get; set; } = "";            // Mã voucher đã sinh (duy nhất)
+    public string VerGen { get; set; } = "01";             // Phiên bản sinh mã
+    public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
+    public string? Remark { get; set; }
 }

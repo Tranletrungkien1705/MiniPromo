@@ -34,6 +34,7 @@ builder.Services.AddScoped<IPolicyMoneyToPointService, PolicyMoneyToPointService
 builder.Services.AddScoped<IMemberDiscountService, MemberDiscountService>();
 builder.Services.AddScoped<IPromotionTypeService, PromotionTypeService>();
 builder.Services.AddScoped<IDiscountCodeService, DiscountCodeService>();
+builder.Services.AddScoped<IVoucherIdService, VoucherIdService>();
 builder.Services.AddFleetObs();
 builder.Services.AddControllersWithViews();
 
@@ -209,6 +210,20 @@ app.MapPost("/api/discount-code/apply", async (DiscountApplyDto dto, IDiscountCo
     return Results.Ok(new { ok = r.ok, msg = r.msg, code = r.code, discount = r.discount, orderAmount = r.orderAmount, payable = r.payable, remainQty = r.remainQty });
 });
 
+// Sinh mã voucher theo hệ cơ số 36 + checksum (công khai).
+app.MapPost("/api/voucher-id/generate", async (VoucherIdGenDto dto, IVoucherIdService svc) =>
+{
+    var r = await svc.GenerateAsync(dto.Amount, dto.At);
+    return Results.Ok(new { ok = r.ok, msg = r.msg, codes = r.codes, lastSeq = r.lastSeq });
+});
+
+// Kiểm tra định dạng + checksum của một mã voucher (công khai).
+app.MapPost("/api/voucher-id/validate", (VoucherIdValidateDto dto, IVoucherIdService svc) =>
+{
+    var r = svc.Validate(dto.VoucherNo ?? "");
+    return Results.Ok(new { ok = r.ok, msg = r.msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -272,6 +287,8 @@ record MemberDiscountRecordDto(string? RefNo, string? DealerCode, string? Member
 record PrmInMainDto(string? MainTypeCode, string? PrmTypeCode);
 record DiscountCheckDto(string? Code, decimal OrderAmount, DateTime? At);
 record DiscountApplyDto(string? Code, decimal OrderAmount, DateTime? At);
+record VoucherIdGenDto(int Amount, DateTime? At);
+record VoucherIdValidateDto(string? VoucherNo);
 record RegisterOrgDto(string Name);
 record ImportCampaignDto(string? Code, string? Name, string? Description, DateTime? FromDate, DateTime? ToDate, int? Status, int LoseWeight, List<ImportPrizeDto>? Prizes, List<ImportEntryDto>? Entries);
 record ImportPrizeDto(string? Name, string? Tier, decimal Value, int Quantity, int Weight);

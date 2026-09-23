@@ -908,3 +908,29 @@ public class DiscountCodeController(IDiscountCodeService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 }
+
+// Sinh mã voucher theo hệ cơ số 36 + checksum (port từ Seq_VoucherID + Mst_VoucherID).
+public class VoucherIdController(IVoucherIdService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.SequencesAsync());
+
+    // Sinh một hoặc nhiều mã voucher mới.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Generate(int amount, DateTime? at)
+    {
+        var o = await svc.GenerateAsync(amount <= 0 ? 1 : amount, at);
+        TempData[o.ok ? "Success" : "Error"] = o.ok
+            ? $"Đã sinh {o.codes.Count} mã: {string.Join(", ", o.codes)}."
+            : o.msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Kiểm tra định dạng + checksum của một mã voucher.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Validate(string voucherNo)
+    {
+        var o = svc.Validate(voucherNo ?? "");
+        TempData[o.ok ? "Success" : "Error"] = o.msg;
+        return RedirectToAction(nameof(Index));
+    }
+}

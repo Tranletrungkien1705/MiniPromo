@@ -48,6 +48,7 @@ public class AppDbContext : DbContext
     public DbSet<PromotionPrmInMain> PromotionPrmInMains => Set<PromotionPrmInMain>();
     public DbSet<DiscountCode> DiscountCodes => Set<DiscountCode>();
     public DbSet<DealerDiscountMap> DealerDiscountMaps => Set<DealerDiscountMap>();
+    public DbSet<VoucherIdSequence> VoucherIdSequences => Set<VoucherIdSequence>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -310,6 +311,11 @@ public class AppDbContext : DbContext
         b.Entity<DealerDiscountMap>(e =>
         {
             e.HasIndex(x => new { x.DealerCode, x.DiscountCode }).IsUnique();   // 1 đại lý + 1 mã giảm giá
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<VoucherIdSequence>(e =>
+        {
+            e.HasIndex(x => x.VoucherNo).IsUnique();      // Mã voucher sinh ra — duy nhất
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

@@ -2592,4 +2592,107 @@ public class DiscountCodeServiceTests
             Assert.Equal(2, (await svc.MapsAsync(null)).Count);
         }
     }
+}/// <summary>Test sinh mã voucher: định dạng base36 + checksum, số thứ tự tăng dần, validate mã hợp lệ/sai checksum.</summary>
+public class VoucherIdServiceTests
+{
+    private static (AppDbContext db, IVoucherIdService svc, SqliteConnection conn) NewSvc()
+    {
+        var conn = new SqliteConnection("DataSource=:memory:"); conn.Open();
+        var opt = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conn).Options;
+        var db = new AppDbContext(opt, new TenantContext { OrgId = TenantContext.DefaultOrgId });
+        db.Database.EnsureCreated();
+        return (db, new VoucherIdService(db), conn);
+    }
+
+    [Fact]
+    public async Task Generate_ReturnsRequestedAmount()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var o = await svc.GenerateAsync(3, new DateTime(2026, 9, 24));
+            Assert.True(o.ok);
+            Assert.Equal(3, o.codes.Count);
+            Assert.Equal(3, o.lastSeq);
+        }
+    }
+
+    [Fact]
+    public async Task Generate_CodeIs10Chars_AndValid()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var o = await svc.GenerateAsync(1, new DateTime(2026, 9, 24));
+            var code = o.codes[0];
+            Assert.Equal(12, code.Length);
+            Assert.True(svc.Validate(code).ok);
+        }
+    }
+
+    [Fact]
+    public async Task Generate_SeqIncrements_AcrossCalls()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.GenerateAsync(2, new DateTime(2026, 9, 24));
+            var o2 = await svc.GenerateAsync(1, new DateTime(2026, 9, 24));
+            Assert.Equal(3, o2.lastSeq);
+            Assert.Equal(3, (await svc.SequencesAsync()).Count);
+        }
+    }
+
+    [Fact]
+    public async Task Generate_ZeroAmount_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            Assert.False((await svc.GenerateAsync(0, null)).ok);
+        }
+    }
+
+    [Fact]
+    public async Task Generate_TooMany_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            Assert.False((await svc.GenerateAsync(1001, null)).ok);
+        }
+    }
+
+    [Fact]
+    public async Task Validate_WrongChecksum_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var o = await svc.GenerateAsync(1, new DateTime(2026, 9, 24));
+            var code = o.codes[0];
+            // Đổi ký tự checksum cuối → sai.
+            var bad = code[..11] + (code[11] == 'Z' ? 'Y' : 'Z');
+            Assert.False(svc.Validate(bad).ok);
+        }
+    }
+
+    [Fact]
+    public void Validate_WrongLength_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            Assert.False(svc.Validate("ABC").ok);
+            Assert.False(svc.Validate("").ok);
+        }
+    }
+
+    [Fact]
+    public async Task Generate_SameDay_SameSeq_ProducesSameCode()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var day = new DateTime(2026, 9, 24);
+            var a = await svc.GenerateAsync(1, day);
+            // Xoá để seq quay lại 0 rồi sinh lại cùng mốc ngày → mã giống nhau (hàm thuần theo seq+ngày).
+            db.VoucherIdSequences.RemoveRange(db.VoucherIdSequences);
+            await db.SaveChangesAsync();
+            var b = await svc.GenerateAsync(1, day);
+            Assert.Equal(a.codes[0], b.codes[0]);
+        }
+    }
 }
