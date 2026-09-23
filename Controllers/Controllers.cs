@@ -934,3 +934,31 @@ public class VoucherIdController(IVoucherIdService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 }
+
+// Tặng điểm giới thiệu (port từ Crd_Member_PerformIntroX).
+public class IntroductionGrantController(IIntroductionGrantService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? memberNo)
+    {
+        ViewBag.MemberNo = memberNo;
+        return View(await svc.GrantsAsync(memberNo));
+    }
+
+    // Tặng điểm giới thiệu cho người giới thiệu của một hội viên mới.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Grant(string newMemberNo, string referrerMemberNo, string? cardNo,
+        string? cardTypeUse, string? cardTypeInit, string? dealerCode, decimal pointIntro, decimal paramValue, DateTime? at)
+    {
+        var o = await svc.GrantAsync(newMemberNo ?? "", referrerMemberNo ?? "", cardNo ?? "",
+            cardTypeUse ?? "", cardTypeInit ?? "", dealerCode ?? "", pointIntro, paramValue, at);
+        TempData[o.ok ? "Success" : "Error"] = o.msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Đối soát điểm giới thiệu đã tặng theo hội viên được thưởng.
+    public async Task<IActionResult> Reconciliation(string? memberNo)
+    {
+        ViewBag.MemberNo = memberNo;
+        return View(await svc.ReconciliationAsync(memberNo));
+    }
+}

@@ -2695,4 +2695,122 @@ public class VoucherIdServiceTests
             Assert.Equal(a.codes[0], b.codes[0]);
         }
     }
+}/// <summary>Test tặng điểm giới thiệu: cộng điểm cho người giới thiệu, chống trùng theo hội viên mới, quy đổi tiền, hạn dùng, đối soát.</summary>
+public class IntroductionGrantServiceTests
+{
+    private static (AppDbContext db, IIntroductionGrantService svc, SqliteConnection conn) NewSvc()
+    {
+        var conn = new SqliteConnection("DataSource=:memory:"); conn.Open();
+        var opt = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conn).Options;
+        var db = new AppDbContext(opt, new TenantContext { OrgId = TenantContext.DefaultOrgId });
+        db.Database.EnsureCreated();
+        return (db, new IntroductionGrantService(db), conn);
+    }
+
+    [Fact]
+    public async Task Grant_AwardsReferrer_NotNewMember()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var o = await svc.GrantAsync("HV100", "HV001", "CARD001", "GOLD", "GOLD", "DLCP01", 1_000, 1_000, null);
+            Assert.True(o.ok);
+            Assert.Equal("HV001", o.memberNo);        // người ĐƯỢC thưởng = người giới thiệu
+            Assert.Equal("HV100", o.newMemberNo);
+            Assert.Equal(1_000, o.point);
+            Assert.Equal(1_000_000, o.amount);        // 1.000 điểm × 1.000
+        }
+    }
+
+    [Fact]
+    public async Task Grant_SameNewMember_Twice_Blocked()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            Assert.True((await svc.GrantAsync("HV100", "HV001", "", "", "", "", 500, 1_000, null)).ok);
+            var o2 = await svc.GrantAsync("HV100", "HV002", "", "", "", "", 500, 1_000, null);
+            Assert.False(o2.ok);  // mỗi hội viên mới chỉ thưởng 1 lần
+        }
+    }
+
+    [Fact]
+    public async Task Grant_SelfReferral_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var o = await svc.GrantAsync("HV001", "HV001", "", "", "", "", 500, 1_000, null);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Grant_NoReferrer_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var o = await svc.GrantAsync("HV100", "", "", "", "", "", 500, 1_000, null);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Grant_ZeroPoint_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var o = await svc.GrantAsync("HV100", "HV001", "", "", "", "", 0, 1_000, null);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Grant_Expiry_IsEndOfNextYearDecember()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var at = new DateTime(2026, 9, 24);
+            var o = await svc.GrantAsync("HV100", "HV001", "", "", "", "", 500, 1_000, at);
+            Assert.True(o.ok);
+            Assert.Equal(new DateTime(2027, 12, 31, 23, 59, 59), o.pointExpiryDTime);
+        }
+    }
+
+    [Fact]
+    public async Task Grant_DefaultParamValue_WhenZero()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var o = await svc.GrantAsync("HV100", "HV001", "", "", "", "", 500, 0, null);
+            Assert.True(o.ok);
+            Assert.Equal(500, o.amount);   // paramValue <= 0 → mặc định 1
+        }
+    }
+
+    [Fact]
+    public async Task Reconciliation_GroupsByReferrer()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.GrantAsync("HV100", "HV001", "", "", "", "", 1_000, 1_000, null);
+            await svc.GrantAsync("HV101", "HV001", "", "", "", "", 500, 1_000, null);
+            await svc.GrantAsync("HV102", "HV002", "", "", "", "", 300, 1_000, null);
+            var rows = await svc.ReconciliationAsync(null);
+            var hv001 = rows.First(r => r.MemberNo == "HV001");
+            Assert.Equal(2, hv001.Granted);
+            Assert.Equal(1_500, hv001.PointGranted);
+            Assert.Equal(1_500_000, hv001.AmountGranted);
+        }
+    }
+
+    [Fact]
+    public async Task Grants_FilterByMember()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.GrantAsync("HV100", "HV001", "", "", "", "", 1_000, 1_000, null);
+            await svc.GrantAsync("HV102", "HV002", "", "", "", "", 300, 1_000, null);
+            var rows = await svc.GrantsAsync("HV002");
+            Assert.Single(rows);
+            Assert.Equal("HV002", rows[0].MemberNo);
+        }
+    }
 }

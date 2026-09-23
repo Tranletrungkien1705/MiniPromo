@@ -274,13 +274,28 @@ public static class Seeder
                 new VoucherIdSequence { Seq = 2, VoucherNo = "017YAB00002T", VerGen = "01", Remark = "Mã voucher mẫu 2." });
             await db.SaveChangesAsync();
         }
+
+        if (!await db.IntroductionGrants.AnyAsync())
+        {
+            // Nhật ký tặng điểm giới thiệu mẫu — theo nguồn Crd_Member_PerformIntroX (DealPointType = 'INTRODUCTION').
+            db.IntroductionGrants.Add(new IntroductionGrant
+            {
+                RefNo = "INT.20260924.090000", MemberNo = "HV001", NewMemberNo = "HV100",
+                CardNo = "CARD001", CardTypeUse = "GOLD", CardTypeInit = "GOLD", DealerCode = "DLCP01",
+                DealPointType = IntroductionPointType.Introduction,
+                PointChTotal = 1_000, AmountChTotal = 1_000_000, ParamValue = 1_000,
+                PointExpiryDTime = new DateTime(DateTime.Today.Year + 1, 12, 31, 23, 59, 59),
+                CreateDate = DateTime.Today, Remark = "Thưởng điểm giới thiệu cho hội viên HV001 (giới thiệu HV100)."
+            });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "PromotionProductScopes", "CarRecommends", "CarRecommendDtls", "CardPromotionPrograms", "CardPromotionProgramDtls", "CardPromotionProgramSpecs", "CardPromotionUsages", "BirthdayPolicies", "BirthdayPolicyDtls", "BirthdayGrants", "IssueVouchers", "IssueVoucherDtls", "IssueVoucherScopes", "IssueVoucherProducts", "IssueVoucherPrices", "RankPolicies", "PolicyMoneyToPoints", "PolicyMoneyToPointDtls", "MemberDiscountTransactions", "PromotionMainTypeDefs", "PromotionPrmTypeDefs", "PromotionPrmInMains", "DiscountCodes", "DealerDiscountMaps", "VoucherIdSequences" };
+        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "PromotionProductScopes", "CarRecommends", "CarRecommendDtls", "CardPromotionPrograms", "CardPromotionProgramDtls", "CardPromotionProgramSpecs", "CardPromotionUsages", "BirthdayPolicies", "BirthdayPolicyDtls", "BirthdayGrants", "IssueVouchers", "IssueVoucherDtls", "IssueVoucherScopes", "IssueVoucherProducts", "IssueVoucherPrices", "RankPolicies", "PolicyMoneyToPoints", "PolicyMoneyToPointDtls", "MemberDiscountTransactions", "PromotionMainTypeDefs", "PromotionPrmTypeDefs", "PromotionPrmInMains", "DiscountCodes", "DealerDiscountMaps", "VoucherIdSequences", "IntroductionGrants" };
         var sql = new List<string> {
             "CREATE TABLE IF NOT EXISTS minipromo.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON minipromo.\"Orgs\" (\"ApiKey\")" };

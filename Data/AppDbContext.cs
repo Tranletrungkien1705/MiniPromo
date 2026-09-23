@@ -49,6 +49,7 @@ public class AppDbContext : DbContext
     public DbSet<DiscountCode> DiscountCodes => Set<DiscountCode>();
     public DbSet<DealerDiscountMap> DealerDiscountMaps => Set<DealerDiscountMap>();
     public DbSet<VoucherIdSequence> VoucherIdSequences => Set<VoucherIdSequence>();
+    public DbSet<IntroductionGrant> IntroductionGrants => Set<IntroductionGrant>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -316,6 +317,14 @@ public class AppDbContext : DbContext
         b.Entity<VoucherIdSequence>(e =>
         {
             e.HasIndex(x => x.VoucherNo).IsUnique();      // Mã voucher sinh ra — duy nhất
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<IntroductionGrant>(e =>
+        {
+            e.HasIndex(x => x.RefNo).IsUnique();          // Số giao dịch tặng điểm giới thiệu — duy nhất
+            e.Property(x => x.PointChTotal).HasPrecision(18, 2);
+            e.Property(x => x.AmountChTotal).HasPrecision(18, 2);
+            e.Property(x => x.ParamValue).HasPrecision(18, 2);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

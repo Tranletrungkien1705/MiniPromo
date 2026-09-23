@@ -12,7 +12,7 @@ namespace MiniPromo.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Produces("application/json")]
-public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IIssueVoucherService issueVouchers, IParamPromotionService paramPromotions, IRankPolicyService rankPolicies, IPolicyMoneyToPointService moneyToPoints, IMemberDiscountService memberDiscounts, IPromotionTypeService promotionTypes, IDiscountCodeService discountCodes, IVoucherIdService voucherIds, ICache cache, ITenantContext tenant) : ControllerBase
+public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IIssueVoucherService issueVouchers, IParamPromotionService paramPromotions, IRankPolicyService rankPolicies, IPolicyMoneyToPointService moneyToPoints, IMemberDiscountService memberDiscounts, IPromotionTypeService promotionTypes, IDiscountCodeService discountCodes, IVoucherIdService voucherIds, IIntroductionGrantService introductionGrants, ICache cache, ITenantContext tenant) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard()
@@ -1287,6 +1287,33 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
         var o = voucherIds.Validate(r.VoucherNo ?? "");
         return o.ok ? Ok(new { ok = o.ok, msg = o.msg }) : BadRequest(new { ok = o.ok, error = o.msg });
     }
+
+    // ---- Tặng điểm giới thiệu (port từ Crd_Member_PerformIntroX) ----
+    [HttpGet("introduction-grants")]
+    public async Task<IActionResult> IntroductionGrants([FromQuery] string? memberNo)
+        => Ok((await introductionGrants.GrantsAsync(memberNo)).Select(g => new
+        {
+            g.Id, g.RefNo, g.MemberNo, g.NewMemberNo, g.CardNo, g.CardTypeUse, g.CardTypeInit, g.DealerCode,
+            dealPointType = (int)g.DealPointType, g.PointChTotal, g.AmountChTotal, g.ParamValue, g.PointExpiryDTime, g.CreateDate, g.Remark
+        }));
+
+    // Đối soát điểm giới thiệu đã tặng theo hội viên được thưởng.
+    [HttpGet("introduction-grants/reconciliation")]
+    public async Task<IActionResult> IntroductionReconciliation([FromQuery] string? memberNo)
+        => Ok((await introductionGrants.ReconciliationAsync(memberNo)).Select(r => new
+        {
+            r.MemberNo, r.Granted, r.PointGranted, r.AmountGranted
+        }));
+
+    // Tặng điểm giới thiệu cho người giới thiệu của một hội viên mới (công khai).
+    [HttpPost("introduction/grant")]
+    public async Task<IActionResult> GrantIntroduction([FromBody] IntroductionGrantReq r)
+    {
+        var o = await introductionGrants.GrantAsync(r.NewMemberNo ?? "", r.ReferrerMemberNo ?? "", r.CardNo ?? "",
+            r.CardTypeUse ?? "", r.CardTypeInit ?? "", r.DealerCode ?? "", r.PointIntro, r.ParamValue, r.At);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, memberNo = o.memberNo, newMemberNo = o.newMemberNo, point = o.point, amount = o.amount, pointExpiryDTime = o.pointExpiryDTime })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
 }
 
 public record DashDto(int Campaigns, int Running, int TotalPlays, int TotalWins, decimal ValueAwarded, List<TopDto> Top);
@@ -1344,6 +1371,7 @@ public class DiscountCheckReq { public string? Code { get; set; } public decimal
 public class DiscountApplyReq { public string? Code { get; set; } public decimal OrderAmount { get; set; } public DateTime? At { get; set; } }
 public class VoucherIdGenReq { public int Amount { get; set; } = 1; public DateTime? At { get; set; } }
 public class VoucherIdValidateReq { public string? VoucherNo { get; set; } }
+public class IntroductionGrantReq { public string? NewMemberNo { get; set; } public string? ReferrerMemberNo { get; set; } public string? CardNo { get; set; } public string? CardTypeUse { get; set; } public string? CardTypeInit { get; set; } public string? DealerCode { get; set; } public decimal PointIntro { get; set; } public decimal ParamValue { get; set; } = 1; public DateTime? At { get; set; } }
 public class RankPolicyReq { public string? Code { get; set; } public string? CardType { get; set; } public int Value { get; set; } public decimal PointUpBegin { get; set; } public decimal PointUpEnd { get; set; } public int QtyVisitUpBegin { get; set; } public int QtyVisitUpEnd { get; set; } public decimal PointKeepBegin { get; set; } public decimal PointKeepEnd { get; set; } public int QtyVisitKeepBegin { get; set; } public int QtyVisitKeepEnd { get; set; } public int QtyMonth { get; set; } = 12; public string? Remark { get; set; } }
 public class RankEvalReq { public string? CardType { get; set; } public decimal Point { get; set; } public int QtyVisit { get; set; } }
 public class PolicyMoneyToPointReq { public string? Code { get; set; } public string Name { get; set; } = ""; public DateTime EffDateStart { get; set; } public DateTime EffDateEnd { get; set; } public string? Remark { get; set; } }

@@ -824,7 +824,39 @@ public class CarPurchasePointGrant : IOrgOwned
     public DateTime CreateDate { get; set; } = DateTime.Today;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public string? Remark { get; set; }
-}// Nhật ký sinh mã voucher — port từ Seq_VoucherID + Mst_VoucherID của hệ Loyalty.
+}
+
+// Loại giao dịch điểm của nghiệp vụ tặng điểm giới thiệu — theo nguồn DealPointType (Const.Main.cs).
+// INTRODUCTION: tặng điểm cho hội viên đã giới thiệu một hội viên mới mua xe.
+public enum IntroductionPointType { Introduction = 0 }
+
+// Nhật ký tặng điểm giới thiệu — port từ Crd_Member_PerformIntroX (Transaction.AddPoint.cs)
+// + bảng Crd_CardTransaction (DealPointType = 'INTRODUCTION').
+// Khi một hội viên mới hoàn tất đăng ký và có khai báo người giới thiệu (MemberNoIntro) kèm số điểm
+// thưởng (PointIntro), hệ thống cộng PointIntro điểm cho NGƯỜI GIỚI THIỆU (không phải hội viên mới),
+// quy đổi ra tiền theo tỷ lệ UNITPOINTTOMONEY (Mst_ParamSys). Điểm có hạn dùng tới cuối tháng 12
+// năm kế tiếp (PointExpiryDTime). Mỗi hội viên mới chỉ được thưởng 1 lần (chống trùng theo RefNo).
+public class IntroductionGrant : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string RefNo { get; set; } = "";                // Số giao dịch (INT.yyyyMMdd.HHmmss)
+    public string MemberNo { get; set; } = "";             // Mã hội viên ĐƯỢC thưởng (người giới thiệu)
+    public string CardNo { get; set; } = "";               // Số thẻ (thẻ APPROVE của người giới thiệu)
+    public string CardTypeUse { get; set; } = "";          // Hạng thẻ sử dụng
+    public string CardTypeInit { get; set; } = "";         // Hạng thẻ gốc của hội viên
+    public string DealerCode { get; set; } = "";           // DLCode — đại lý ghi nhận
+    public string NewMemberNo { get; set; } = "";          // Mã hội viên MỚI (người được giới thiệu)
+    public IntroductionPointType DealPointType { get; set; } = IntroductionPointType.Introduction;
+    public decimal PointChTotal { get; set; }              // Điểm giới thiệu đã tặng (PointIntro)
+    public decimal AmountChTotal { get; set; }             // Số tiền quy đổi (PointChTotal × ParamValue)
+    public decimal ParamValue { get; set; } = 1;           // Tỷ lệ quy đổi điểm → tiền (UNITPOINTTOMONEY)
+    public DateTime PointExpiryDTime { get; set; }         // Hạn dùng điểm (cuối tháng 12 năm kế tiếp)
+    public DateTime CreateDate { get; set; } = DateTime.Today;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public string? Remark { get; set; }
+}
+// Nhật ký sinh mã voucher — port từ Seq_VoucherID + Mst_VoucherID của hệ Loyalty.
 // Mỗi lần sinh mã, hệ thống cấp một số thứ tự tăng dần (Seq) rồi mã hoá thành mã voucher
 // theo hệ cơ số 36 (0-9, A-Z): {VerGen}{Năm36}{Tháng36}{Ngày36}{NgẫuNhiên36}{Checksum36} (12 ký tự).
 // Checksum = tổng giá trị các ký tự base36 của 11 ký tự đầu, lấy dư 36, mã hoá base36 1 ký tự.
