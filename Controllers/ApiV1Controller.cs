@@ -662,6 +662,15 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
 
+    // Danh sách chương trình ưu đãi khả dụng cho một hội viên/thẻ (port từ Crd_Card_GetForPromotion).
+    [HttpGet("card-promotion-programs/available")]
+    public async Task<IActionResult> AvailableCardPromotions([FromQuery] string? cardType, [FromQuery] string? dealerCode, [FromQuery] DateTime? at)
+        => Ok((await cardPrograms.AvailableForCardAsync(cardType ?? "", dealerCode ?? "", at)).Select(r => new
+        {
+            r.CardPromotionProgramId, r.ProgramCode, r.ProgramName, r.EffDateStart,
+            r.QtyPr, r.QtyPrUsed, r.QtyRemain, r.FlagShow
+        }));
+
     // ---- Chương trình tặng điểm sinh nhật (port từ Mst_BirthPolicy) ----
     [HttpGet("birthday-policies")]
     public async Task<IActionResult> BirthdayPolicies()

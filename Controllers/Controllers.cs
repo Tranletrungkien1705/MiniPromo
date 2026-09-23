@@ -486,6 +486,22 @@ public class CardPromotionProgramController(ICardPromotionProgramService svc) : 
     }
 }
 
+// Tra cứu chương trình ưu đãi khả dụng cho một hội viên/thẻ (port từ Crd_Card_GetForPromotion).
+public class AvailablePromotionController(ICardPromotionProgramService svc) : Controller
+{
+    public IActionResult Index() => View(new List<AvailablePromotionRow>());
+
+    // Tra cứu ưu đãi khả dụng theo loại thẻ + đại lý của thẻ.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Lookup(string cardType, string dealerCode, DateTime? at)
+    {
+        ViewBag.CardType = cardType;
+        ViewBag.DealerCode = dealerCode;
+        ViewBag.At = at;
+        return View(nameof(Index), await svc.AvailableForCardAsync(cardType ?? "", dealerCode ?? "", at));
+    }
+}
+
 // Chương trình tặng điểm sinh nhật (port từ Mst_BirthPolicy).
 public class BirthdayPolicyController(IBirthdayPolicyService svc) : Controller
 {

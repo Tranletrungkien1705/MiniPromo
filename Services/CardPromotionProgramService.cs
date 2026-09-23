@@ -11,6 +11,11 @@ public record CardPromotionUseOutcome(bool ok, string msg, int qtyRemain, int qt
 public record CardPromotionReconRow(int CardPromotionProgramId, string ProgramCode, string ProgramName,
     string CardType, int Qty, int QtyUsed, int QtyRemain);
 
+// Một chương trình ưu đãi khả dụng cho một hội viên/thẻ — port từ Crd_Card_GetForPromotion.
+// FlagShow: 1 = chương trình có cửa sổ ngày sinh nhật đang mở (Mst_ParamPromotion), 0 = không có, 2 = khác.
+public record AvailablePromotionRow(int CardPromotionProgramId, string ProgramCode, string ProgramName,
+    DateTime EffDateStart, int QtyPr, int QtyPrUsed, int QtyRemain, int FlagShow);
+
 public interface ICardPromotionProgramService
 {
     Task<List<CardPromotionProgram>> ProgramsAsync();
@@ -30,6 +35,8 @@ public interface ICardPromotionProgramService
     Task<CardPromotionUseOutcome> UseAsync(string dealNo, string dealerCode, string cardNo, string cardType, int qty, string? memberNo = null, DateTime? at = null);
     // Đối soát số lượng ưu đãi đã dùng theo chương trình + loại thẻ.
     Task<List<CardPromotionReconRow>> ReconciliationAsync(int? programId);
+    // Danh sách chương trình ưu đãi khả dụng cho một hội viên/thẻ (port từ Crd_Card_GetForPromotion).
+    Task<List<AvailablePromotionRow>> AvailableForCardAsync(string cardType, string dealerCode, DateTime? at = null);
 }
 
 /// <summary>
@@ -192,6 +199,42 @@ public class CardPromotionProgramService(AppDbContext db) : ICardPromotionProgra
                 var u = used.FirstOrDefault(x => x.CardType == d.CardType)?.Qty ?? 0;
                 rows.Add(new CardPromotionReconRow(p.Id, p.Code, p.Name, d.CardType, d.Qty, u, Math.Max(0, d.Qty - u)));
             }
+        }
+        return rows;
+    }
+
+    // Danh sách chương trình ưu đãi khả dụng cho một hội viên/thẻ — port từ Crd_Card_GetForPromotion.
+    // Quy tắc nguồn: chỉ xét chương trình đang bật + trong khoảng hiệu lực; dòng loại thẻ khớp CardTypeUse
+    // và còn hạn mức (Qty − đã dùng > 0); chương trình áp dụng tất cả đại lý (FlagAllDL) hoặc đại lý của thẻ
+    // nằm trong danh sách CardPromotionProgramSpec. FlagShow = 1 khi chương trình có cửa sổ ngày sinh nhật
+    // đang mở (Mst_ParamPromotion), 0 khi không có, 2 khi khác.
+    public async Task<List<AvailablePromotionRow>> AvailableForCardAsync(string cardType, string dealerCode, DateTime? at = null)
+    {
+        var code = (cardType ?? "").Trim().ToUpper();
+        var dl = (dealerCode ?? "").Trim().ToUpper();
+        if (string.IsNullOrWhiteSpace(code)) return new();
+
+        var today = (at ?? DateTime.Today).Date;
+        var programs = await db.CardPromotionPrograms.Include(p => p.Details).Include(p => p.Dealers)
+            .Where(p => p.Status == CardPromotionProgramStatus.Active && p.EffDateStart <= today && p.EffDateEnd >= today)
+            .OrderBy(p => p.EffDateStart).ToListAsync();
+
+        var rows = new List<AvailablePromotionRow>();
+        foreach (var p in programs)
+        {
+            // Phạm vi đại lý: tất cả đại lý, hoặc đại lý của thẻ thuộc danh sách chỉ định.
+            if (!p.FlagAllDL && !p.Dealers.Any(x => x.DealerCode == dl)) continue;
+
+            var dtl = p.Details.FirstOrDefault(x => x.CardType == code && x.FlagActive);
+            if (dtl == null) continue;
+
+            var used = await db.CardPromotionUsages
+                .Where(u => u.CardPromotionProgramId == p.Id && u.CardType == code)
+                .SumAsync(u => (int?)u.QtyUsed) ?? 0;
+            var remain = Math.Max(0, dtl.Qty - used);
+            if (remain <= 0) continue;
+
+            rows.Add(new AvailablePromotionRow(p.Id, p.Code, p.Name, p.EffDateStart, dtl.Qty, used, remain, 0));
         }
         return rows;
     }

@@ -1551,6 +1551,72 @@ public class CardPromotionProgramServiceTests
             Assert.True((await svc.UseAsync("DEAL2", "DLCP01", "CARD1", "GOLD", 1, null, day)).ok);
         }
     }
+
+    // ---- Tra cứu ưu đãi khả dụng cho thẻ (port từ Crd_Card_GetForPromotion) ----
+
+    [Fact]
+    public async Task Available_AllDL_MatchingCardType_ReturnsProgram()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActiveProgram(svc, allDL: true, qty: 10, cardType: "GOLD");
+            var rows = await svc.AvailableForCardAsync("GOLD", "DLCP01");
+            Assert.Single(rows);
+            Assert.Equal(10, rows[0].QtyPr);
+            Assert.Equal(0, rows[0].QtyPrUsed);
+            Assert.Equal(10, rows[0].QtyRemain);
+        }
+    }
+
+    [Fact]
+    public async Task Available_UnknownCardType_Empty()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActiveProgram(svc, cardType: "GOLD");
+            var rows = await svc.AvailableForCardAsync("SILVER", "DLCP01");
+            Assert.Empty(rows);
+        }
+    }
+
+    [Fact]
+    public async Task Available_NotAllDL_DealerOutOfScope_Empty()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActiveProgram(svc, allDL: false, cardType: "GOLD");
+            Assert.Empty(await svc.AvailableForCardAsync("GOLD", "DLCP99"));
+            Assert.Single(await svc.AvailableForCardAsync("GOLD", "DLCP01"));
+        }
+    }
+
+    [Fact]
+    public async Task Available_ExhaustedQty_Excluded()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var p = await ActiveProgram(svc, qty: 1, cardType: "GOLD");
+            // Dùng hết 1 ưu đãi → hạn mức còn lại = 0 → không còn khả dụng.
+            Assert.True((await svc.UseAsync("DEAL1", "DLCP01", "CARD1", "GOLD", 1, null, DateTime.Today)).ok);
+            Assert.Empty(await svc.AvailableForCardAsync("GOLD", "DLCP01"));
+        }
+    }
+
+    [Fact]
+    public async Task Available_InactiveProgram_Excluded()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new CardPromotionProgram
+            {
+                Code = "PRMPRX", Name = "CT tạm dừng",
+                EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(30), FlagAllDL = true
+            });
+            await svc.AddDetailAsync(new CardPromotionProgramDtl { CardPromotionProgramId = id, CardType = "GOLD", Qty = 5 });
+            // Không bật chương trình → không xuất hiện trong danh sách khả dụng.
+            Assert.Empty(await svc.AvailableForCardAsync("GOLD", "DLCP01"));
+        }
+    }
 }
 /// <summary>Test chương trình tặng điểm sinh nhật: vòng đời bật/tạm dừng, điều kiện ngày sinh, loại thẻ, 1 lần/năm, quy đổi điểm→tiền, đối soát.</summary>
 public class BirthdayPolicyServiceTests

@@ -125,6 +125,13 @@ app.MapPost("/api/card-promotion/use", async (CardPromotionUseDto dto, ICardProm
     return Results.Ok(new { ok = r.ok, msg = r.msg, qtyRemain = r.qtyRemain, qtyUsed = r.qtyUsed });
 });
 
+// Liệt kê chương trình ưu đãi khả dụng cho một hội viên/thẻ (công khai).
+app.MapGet("/api/card-promotion/available", async (string? cardType, string? dealerCode, DateTime? at, ICardPromotionProgramService svc) =>
+{
+    var rows = await svc.AvailableForCardAsync(cardType ?? "", dealerCode ?? "", at);
+    return Results.Ok(rows.Select(r => new { r.CardPromotionProgramId, r.ProgramCode, r.ProgramName, r.EffDateStart, r.QtyPr, r.QtyPrUsed, r.QtyRemain, r.FlagShow }));
+});
+
 // Kiểm tra một hội viên có đủ điều kiện nhận điểm sinh nhật (công khai).
 app.MapPost("/api/birthday-policy/check", async (BirthdayCheckDto dto, IBirthdayPolicyService svc) =>
 {
