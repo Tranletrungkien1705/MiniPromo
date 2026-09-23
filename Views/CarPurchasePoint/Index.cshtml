@@ -1,0 +1,47 @@
+@model List<CarPurchasePointGrant>
+@{ ViewData["Title"] = "Điểm mua xe mới"; }
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="fw-bold mb-0">Tặng điểm mua xe mới</h5>
+    <a class="btn btn-sm btn-outline-primary" href="/CarPurchasePoint/Reconciliation"><i class="bi bi-clipboard-data me-1"></i>Đối soát</a>
+</div>
+<div class="row g-3">
+    <div class="col-lg-8"><div class="card"><div class="card-body">
+        <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>Số giao dịch</th><th>Hội viên</th><th>Thẻ</th><th class="text-end">Điểm</th><th class="text-end">Số tiền</th><th>Hạn dùng</th></tr></thead>
+            <tbody>
+            @foreach (var g in Model)
+            {
+                <tr>
+                    <td class="fw-semibold small">@g.RefNo</td>
+                    <td>@g.MemberNo <span class="text-muted small">@g.CardTypeUse</span></td>
+                    <td class="small text-muted">@g.CardNo</td>
+                    <td class="text-end fw-semibold" style="color:#db2777">@g.PointChTotal.ToString("N0")</td>
+                    <td class="text-end">@Ui.Money(g.AmountChTotal)</td>
+                    <td class="small text-muted">@g.PointExpiryDTime.ToString("dd/MM/yyyy")</td>
+                </tr>
+            }
+            @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có lượt tặng điểm mua xe mới.</td></tr> }
+            </tbody>
+        </table>
+    </div></div></div>
+    <div class="col-lg-4"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Tặng điểm mua xe mới</h6>
+        <form asp-action="Grant" method="post">@Html.AntiForgeryToken()
+            <div class="mb-2"><input name="memberNo" class="form-control form-control-sm text-uppercase" placeholder="Mã hội viên *" required /></div>
+            <div class="row g-2 mb-2">
+                <div class="col-6"><input name="cardNo" class="form-control form-control-sm text-uppercase" placeholder="Số thẻ" /></div>
+                <div class="col-6"><input name="dealerCode" class="form-control form-control-sm text-uppercase" placeholder="Mã đại lý" /></div>
+            </div>
+            <div class="row g-2 mb-2">
+                <div class="col-6"><input name="cardTypeUse" class="form-control form-control-sm text-uppercase" placeholder="Hạng thẻ dùng" /></div>
+                <div class="col-6"><input name="cardTypeInit" class="form-control form-control-sm text-uppercase" placeholder="Hạng thẻ gốc" /></div>
+            </div>
+            <div class="mb-2"><input name="prProgramCode" class="form-control form-control-sm text-uppercase" placeholder="Mã chương trình bán xe" /></div>
+            <div class="row g-2 mb-2">
+                <div class="col-6"><input name="pointBuyCar" type="number" step="1" class="form-control form-control-sm" placeholder="Điểm mua xe *" required /></div>
+                <div class="col-6"><input name="paramValue" type="number" step="1" value="1000" class="form-control form-control-sm" placeholder="Tỷ lệ điểm→tiền" /></div>
+            </div>
+            <button class="btn btn-primary w-100"><i class="bi bi-car-front me-1"></i>Tặng điểm</button>
+        </form>
+    </div></div></div>
+</div>

@@ -51,6 +51,7 @@ public class AppDbContext : DbContext
     public DbSet<DealerDiscountMap> DealerDiscountMaps => Set<DealerDiscountMap>();
     public DbSet<VoucherIdSequence> VoucherIdSequences => Set<VoucherIdSequence>();
     public DbSet<IntroductionGrant> IntroductionGrants => Set<IntroductionGrant>();
+    public DbSet<CarPurchasePointGrant> CarPurchasePointGrants => Set<CarPurchasePointGrant>();
     public DbSet<ExpenseType> ExpenseTypes => Set<ExpenseType>();
     public DbSet<PolicyExpenseType> PolicyExpenseTypes => Set<PolicyExpenseType>();
 
@@ -337,6 +338,14 @@ public class AppDbContext : DbContext
         b.Entity<IntroductionGrant>(e =>
         {
             e.HasIndex(x => x.RefNo).IsUnique();          // Số giao dịch tặng điểm giới thiệu — duy nhất
+            e.Property(x => x.PointChTotal).HasPrecision(18, 2);
+            e.Property(x => x.AmountChTotal).HasPrecision(18, 2);
+            e.Property(x => x.ParamValue).HasPrecision(18, 2);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CarPurchasePointGrant>(e =>
+        {
+            e.HasIndex(x => x.RefNo).IsUnique();          // Số giao dịch tặng điểm mua xe mới — duy nhất
             e.Property(x => x.PointChTotal).HasPrecision(18, 2);
             e.Property(x => x.AmountChTotal).HasPrecision(18, 2);
             e.Property(x => x.ParamValue).HasPrecision(18, 2);

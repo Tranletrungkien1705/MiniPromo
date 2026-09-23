@@ -1,0 +1,27 @@
+@model List<CarPurchaseReconRow>
+@{ ViewData["Title"] = "Đối soát điểm mua xe mới"; }
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="fw-bold mb-0">Đối soát điểm mua xe mới theo hội viên</h5>
+    <a class="btn btn-sm btn-outline-secondary" href="/CarPurchasePoint"><i class="bi bi-arrow-left me-1"></i>Về danh sách</a>
+</div>
+<div class="card"><div class="card-body">
+    <form method="get" class="mb-3 d-flex gap-2">
+        <input name="memberNo" value="@ViewBag.MemberNo" class="form-control form-control-sm text-uppercase" placeholder="Lọc theo mã hội viên" />
+        <button class="btn btn-sm btn-outline-secondary">Lọc</button>
+    </form>
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Hội viên</th><th class="text-end">Số lượt tặng</th><th class="text-end">Tổng điểm</th><th class="text-end">Tổng tiền</th></tr></thead>
+        <tbody>
+        @foreach (var r in Model)
+        {
+            <tr>
+                <td><span class="badge bg-secondary">@r.MemberNo</span></td>
+                <td class="text-end">@r.Granted</td>
+                <td class="text-end fw-semibold" style="color:#db2777">@r.PointGranted.ToString("N0")</td>
+                <td class="text-end">@Ui.Money(r.AmountGranted)</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="4" class="text-center text-muted py-4">Chưa có dữ liệu đối soát.</td></tr> }
+        </tbody>
+    </table>
+</div></div>
