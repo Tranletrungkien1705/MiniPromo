@@ -203,3 +203,110 @@ public class VoucherServiceTests
         }
     }
 }
+
+/// <summary>Test chương trình voucher theo model: chỉ 1 chương trình hiệu lực, điều kiện ngày, tính giá trị theo model.</summary>
+public class VoucherProgramServiceTests
+{
+    private static (AppDbContext db, IVoucherProgramService svc, SqliteConnection conn) NewSvc()
+    {
+        var conn = new SqliteConnection("DataSource=:memory:"); conn.Open();
+        var opt = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conn).Options;
+        var db = new AppDbContext(opt, new TenantContext { OrgId = TenantContext.DefaultOrgId });
+        db.Database.EnsureCreated();
+        return (db, new VoucherProgramService(db), conn);
+    }
+
+    private static async Task<VoucherProgram> FinishedProgram(IVoucherProgramService svc, bool allModel = false, decimal point = 5_000_000)
+    {
+        var (_, _, id) = await svc.CreateProgramAsync(new VoucherProgram
+        {
+            Code = "PRM" + Guid.NewGuid().ToString("N")[..6].ToUpper(), Name = "CT test",
+            EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(30),
+            ValidityPeriod = 30, QtyDayLimitFDlvDate = 30, FlagAllModel = allModel,
+            PointVoucherAllModel = allModel ? point : 0, PointUseLimitAllModel = allModel ? point : 0
+        });
+        if (!allModel)
+            await svc.AddDetailAsync(new VoucherProgramDtl { VoucherProgramId = id, ModelCode = "CITY", PointVoucher = point, PointUseLimit = point });
+        await svc.SetStatusAsync(id, VoucherProgramStatus.Finished);
+        return (await svc.GetProgramAsync(id))!;
+    }
+
+    [Fact]
+    public async Task Create_StartBeforeToday_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, _) = await svc.CreateProgramAsync(new VoucherProgram { Name = "X", EffDateStart = DateTime.Today.AddDays(-1), EffDateEnd = DateTime.Today.AddDays(10) });
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task Create_StartNotAfterPrevious_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await FinishedProgram(svc);
+            // Chương trình trước bắt đầu hôm nay → chương trình mới cũng bắt đầu hôm nay là không hợp lệ.
+            var (ok, _, _) = await svc.CreateProgramAsync(new VoucherProgram { Name = "Y", EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(10) });
+            Assert.False(ok);  // phải sau chương trình trước
+        }
+    }
+
+    [Fact]
+    public async Task AddDetail_NonPositiveValue_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new VoucherProgram { Name = "Z", EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(10) });
+            var (ok, _) = await svc.AddDetailAsync(new VoucherProgramDtl { VoucherProgramId = id, ModelCode = "CITY", PointVoucher = 0 });
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_AllModel_ReturnsCommonValue()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await FinishedProgram(svc, allModel: true, point: 7_000_000);
+            var o = await svc.CalcAsync("ANY", DateTime.Today, DateTime.Today);
+            Assert.True(o.ok);
+            Assert.Equal(7_000_000, o.pointVoucher);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_PerModel_UnknownModel_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await FinishedProgram(svc, allModel: false);
+            var o = await svc.CalcAsync("UNKNOWN", DateTime.Today, DateTime.Today);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_RegistrationBeyondDayLimit_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await FinishedProgram(svc, allModel: false);
+            var o = await svc.CalcAsync("CITY", DateTime.Today, DateTime.Today.AddDays(60));  // > 30 ngày
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_ValidModel_ReturnsValue()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await FinishedProgram(svc, allModel: false, point: 5_000_000);
+            var o = await svc.CalcAsync("city", DateTime.Today, DateTime.Today.AddDays(5));
+            Assert.True(o.ok);
+            Assert.Equal(5_000_000, o.pointVoucher);
+        }
+    }
+}
