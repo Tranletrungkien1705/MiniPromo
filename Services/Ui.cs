@@ -65,6 +65,13 @@ public static class Ui
         _ => (s.ToString(), "secondary")
     };
 
+    public static (string text, string css) CardPromotionProgram(CardPromotionProgramStatus s) => s switch
+    {
+        CardPromotionProgramStatus.Active   => ("Đang bật", "success"),
+        CardPromotionProgramStatus.Inactive => ("Tạm dừng", "secondary"),
+        _ => (s.ToString(), "secondary")
+    };
+
     public static string MainTypeText(PromotionMainType t) => t switch
     {
         PromotionMainType.Order           => "Đơn hàng",

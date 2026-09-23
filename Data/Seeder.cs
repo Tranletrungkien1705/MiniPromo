@@ -104,13 +104,30 @@ public static class Seeder
                 new CarRecommendDtl { CarRecommendId = cr.Id, ModelCode = "CRV", PointVal = 5_000_000 });
             await db.SaveChangesAsync();
         }
+
+        if (!await db.CardPromotionPrograms.AnyAsync())
+        {
+            var cp = new CardPromotionProgram
+            {
+                Code = "PRMPR2026", Name = "Ưu đãi theo loại thẻ 2026",
+                EffDateStart = DateTime.Today.AddDays(-3), EffDateEnd = DateTime.Today.AddMonths(2),
+                FlagAllDL = false, Status = CardPromotionProgramStatus.Active,
+                Remark = "Cấp số lượng ưu đãi theo loại thẻ, áp dụng cho đại lý chỉ định."
+            };
+            db.CardPromotionPrograms.Add(cp); await db.SaveChangesAsync();
+            db.CardPromotionProgramDtls.AddRange(
+                new CardPromotionProgramDtl { CardPromotionProgramId = cp.Id, CardType = "GOLD", Qty = 10, Unit = "Lần" },
+                new CardPromotionProgramDtl { CardPromotionProgramId = cp.Id, CardType = "PLATINUM", Qty = 20, Unit = "Lần" });
+            db.CardPromotionProgramSpecs.Add(new CardPromotionProgramSpec { CardPromotionProgramId = cp.Id, DealerCode = "DLCP01" });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "CarRecommends", "CarRecommendDtls" };
+        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "CarRecommends", "CarRecommendDtls", "CardPromotionPrograms", "CardPromotionProgramDtls", "CardPromotionProgramSpecs", "CardPromotionUsages" };
         var sql = new List<string> {
             "CREATE TABLE IF NOT EXISTS minipromo.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON minipromo.\"Orgs\" (\"ApiKey\")" };

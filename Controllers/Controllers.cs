@@ -406,3 +406,70 @@ public class CarRecommendController(ICarRecommendService svc) : Controller
         TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
     }
 }
+
+// Chương trình khuyến mại theo loại thẻ (port từ Mst_PromotionProgram).
+public class CardPromotionProgramController(ICardPromotionProgramService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.ProgramsAsync());
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string name, string? code, DateTime effDateStart, DateTime effDateEnd,
+        bool flagAllDL, string? remark)
+    {
+        var (ok, msg, id) = await svc.CreateProgramAsync(new CardPromotionProgram
+        {
+            Name = name ?? "", Code = (code ?? "").Trim().ToUpper(),
+            EffDateStart = effDateStart == default ? DateTime.Today : effDateStart,
+            EffDateEnd = effDateEnd == default ? DateTime.Today.AddMonths(1) : effDateEnd,
+            FlagAllDL = flagAllDL, Remark = remark
+        });
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Detail), new { id }) : RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var p = await svc.GetProgramAsync(id);
+        if (p == null) return NotFound();
+        ViewBag.Recon = await svc.ReconciliationAsync(id);
+        return View(p);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddDetail(int id, string cardType, int qty, string? unit, string? remark)
+    {
+        var (ok, msg) = await svc.AddDetailAsync(new CardPromotionProgramDtl { CardPromotionProgramId = id, CardType = cardType ?? "", Qty = qty, Unit = unit, Remark = remark });
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddDealer(int id, string dealerCode)
+    {
+        var (ok, msg) = await svc.AddDealerAsync(new CardPromotionProgramSpec { CardPromotionProgramId = id, DealerCode = dealerCode ?? "" });
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetStatus(int id, CardPromotionProgramStatus status)
+    {
+        var (ok, msg) = await svc.SetStatusAsync(id, status);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Ghi nhận sử dụng ưu đãi cho một giao dịch (port từ Crd_DealUsePromotion_Save).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Use(string dealNo, string dealerCode, string cardNo, string cardType, int qty)
+    {
+        var o = await svc.UseAsync(dealNo ?? "", dealerCode ?? "", cardNo ?? "", cardType ?? "", qty);
+        TempData[o.ok ? "Success" : "Error"] = o.msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Đối soát số lượng ưu đãi đã dùng theo chương trình + loại thẻ.
+    public async Task<IActionResult> Reconciliation(int? programId)
+    {
+        ViewBag.ProgramId = programId;
+        ViewBag.Programs = await svc.ProgramsAsync();
+        return View(await svc.ReconciliationAsync(programId));
+    }
+}

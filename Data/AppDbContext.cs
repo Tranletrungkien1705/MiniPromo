@@ -24,6 +24,10 @@ public class AppDbContext : DbContext
     public DbSet<PromotionMain> PromotionMains => Set<PromotionMain>();
     public DbSet<CarRecommend> CarRecommends => Set<CarRecommend>();
     public DbSet<CarRecommendDtl> CarRecommendDtls => Set<CarRecommendDtl>();
+    public DbSet<CardPromotionProgram> CardPromotionPrograms => Set<CardPromotionProgram>();
+    public DbSet<CardPromotionProgramDtl> CardPromotionProgramDtls => Set<CardPromotionProgramDtl>();
+    public DbSet<CardPromotionProgramSpec> CardPromotionProgramSpecs => Set<CardPromotionProgramSpec>();
+    public DbSet<CardPromotionUsage> CardPromotionUsages => Set<CardPromotionUsage>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -137,6 +141,27 @@ public class AppDbContext : DbContext
         {
             e.Property(x => x.PointVal).HasPrecision(18, 2);
             e.HasOne(x => x.CarRecommend).WithMany(x => x.Details).HasForeignKey(x => x.CarRecommendId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CardPromotionProgram>(e =>
+        {
+            e.HasIndex(x => x.Code).IsUnique();           // Mã chương trình khuyến mại theo loại thẻ — duy nhất
+            e.Ignore(x => x.IsLiveNow);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CardPromotionProgramDtl>(e =>
+        {
+            e.HasOne(x => x.CardPromotionProgram).WithMany(x => x.Details).HasForeignKey(x => x.CardPromotionProgramId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CardPromotionProgramSpec>(e =>
+        {
+            e.HasOne(x => x.CardPromotionProgram).WithMany(x => x.Dealers).HasForeignKey(x => x.CardPromotionProgramId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CardPromotionUsage>(e =>
+        {
+            e.HasOne(x => x.CardPromotionProgram).WithMany().HasForeignKey(x => x.CardPromotionProgramId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

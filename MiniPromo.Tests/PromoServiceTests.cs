@@ -1190,3 +1190,204 @@ public class CarRecommendServiceTests
         }
     }
 }
+/// <summary>Test chương trình khuyến mại theo loại thẻ: hạn mức theo loại thẻ, phạm vi đại lý, ghi nhận sử dụng, đối soát.</summary>
+public class CardPromotionProgramServiceTests
+{
+    private static (AppDbContext db, ICardPromotionProgramService svc, SqliteConnection conn) NewSvc()
+    {
+        var conn = new SqliteConnection("DataSource=:memory:"); conn.Open();
+        var opt = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conn).Options;
+        var db = new AppDbContext(opt, new TenantContext { OrgId = TenantContext.DefaultOrgId });
+        db.Database.EnsureCreated();
+        return (db, new CardPromotionProgramService(db), conn);
+    }
+
+    // Chương trình đang bật, áp dụng tất cả đại lý, loại thẻ GOLD hạn mức 10.
+    private static async Task<CardPromotionProgram> ActiveProgram(ICardPromotionProgramService svc,
+        bool allDL = true, int qty = 10, string cardType = "GOLD")
+    {
+        var (_, _, id) = await svc.CreateProgramAsync(new CardPromotionProgram
+        {
+            Code = "PRMPR" + Guid.NewGuid().ToString("N")[..6].ToUpper(), Name = "CT test",
+            EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(30), FlagAllDL = allDL
+        });
+        await svc.AddDetailAsync(new CardPromotionProgramDtl { CardPromotionProgramId = id, CardType = cardType, Qty = qty });
+        if (!allDL) await svc.AddDealerAsync(new CardPromotionProgramSpec { CardPromotionProgramId = id, DealerCode = "DLCP01" });
+        await svc.SetStatusAsync(id, CardPromotionProgramStatus.Active);
+        return (await svc.GetProgramAsync(id))!;
+    }
+
+    [Fact]
+    public async Task Create_MissingName_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, _) = await svc.CreateProgramAsync(new CardPromotionProgram { Name = "" });
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task Create_EndBeforeStart_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, _) = await svc.CreateProgramAsync(new CardPromotionProgram { Name = "X", EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(-1) });
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task AddDetail_NonPositiveQty_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new CardPromotionProgram { Name = "X" });
+            var (ok, _) = await svc.AddDetailAsync(new CardPromotionProgramDtl { CardPromotionProgramId = id, CardType = "GOLD", Qty = 0 });
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task AddDetail_DuplicateCardType_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new CardPromotionProgram { Name = "X" });
+            await svc.AddDetailAsync(new CardPromotionProgramDtl { CardPromotionProgramId = id, CardType = "GOLD", Qty = 5 });
+            var (ok, _) = await svc.AddDetailAsync(new CardPromotionProgramDtl { CardPromotionProgramId = id, CardType = "GOLD", Qty = 3 });
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task SetStatus_ActiveWithoutDetail_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new CardPromotionProgram { Name = "X" });
+            var (ok, _) = await svc.SetStatusAsync(id, CardPromotionProgramStatus.Active);
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task SetStatus_ActiveWithoutDealer_WhenNotAllDL_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new CardPromotionProgram { Name = "X", FlagAllDL = false });
+            await svc.AddDetailAsync(new CardPromotionProgramDtl { CardPromotionProgramId = id, CardType = "GOLD", Qty = 5 });
+            var (ok, _) = await svc.SetStatusAsync(id, CardPromotionProgramStatus.Active);
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task CheckUse_NoActiveProgram_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var o = await svc.CheckUseAsync("DLCP01", "GOLD", 1);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task CheckUse_UnknownCardType_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActiveProgram(svc);
+            var o = await svc.CheckUseAsync("DLCP01", "SILVER", 1);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task CheckUse_DealerOutOfScope_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActiveProgram(svc, allDL: false);
+            var o = await svc.CheckUseAsync("DLCP99", "GOLD", 1);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task CheckUse_DealerInScope_Ok()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActiveProgram(svc, allDL: false);
+            var o = await svc.CheckUseAsync("DLCP01", "GOLD", 1);
+            Assert.True(o.ok);
+            Assert.Equal(10, o.qtyRemain);
+        }
+    }
+
+    [Fact]
+    public async Task CheckUse_QtyExceedsRemain_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActiveProgram(svc, qty: 3);
+            var o = await svc.CheckUseAsync("DLCP01", "GOLD", 5);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Use_DecrementsRemain()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActiveProgram(svc, qty: 10);
+            var o = await svc.UseAsync("DEAL1", "DLCP01", "CARD1", "GOLD", 4);
+            Assert.True(o.ok);
+            Assert.Equal(6, o.qtyRemain);
+            Assert.Equal(4, o.qtyUsed);
+            Assert.Equal(6, await svc.QtyRemainAsync((await svc.ActiveProgramAsync())!.Id, "GOLD"));
+        }
+    }
+
+    [Fact]
+    public async Task Use_ExhaustsRemain_ThenRejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActiveProgram(svc, qty: 5);
+            await svc.UseAsync("DEAL1", "DLCP01", "CARD1", "GOLD", 5);
+            var o = await svc.UseAsync("DEAL2", "DLCP01", "CARD2", "GOLD", 1);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Use_MissingDealNo_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActiveProgram(svc);
+            var o = await svc.UseAsync("", "DLCP01", "CARD1", "GOLD", 1);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Reconciliation_ReportsUsedAndRemain()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var p = await ActiveProgram(svc, qty: 10);
+            await svc.UseAsync("DEAL1", "DLCP01", "CARD1", "GOLD", 3);
+            var rows = await svc.ReconciliationAsync(p.Id);
+            var row = Assert.Single(rows);
+            Assert.Equal("GOLD", row.CardType);
+            Assert.Equal(10, row.Qty);
+            Assert.Equal(3, row.QtyUsed);
+            Assert.Equal(7, row.QtyRemain);
+        }
+    }
+}

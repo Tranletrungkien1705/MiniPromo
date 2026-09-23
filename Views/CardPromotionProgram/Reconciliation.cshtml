@@ -1,0 +1,57 @@
+@model List<CardPromotionReconRow>
+@{
+    ViewData["Title"] = "Đối soát ưu đãi theo loại thẻ";
+    var programs = ViewBag.Programs as List<CardPromotionProgram> ?? new();
+    int? programId = ViewBag.ProgramId as int?;
+    var totalQty = Model.Sum(r => r.Qty);
+    var totalUsed = Model.Sum(r => r.QtyUsed);
+    var totalRemain = Model.Sum(r => r.QtyRemain);
+}
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="fw-bold mb-0">Đối soát ưu đãi theo loại thẻ</h5>
+    <a href="/CardPromotionProgram" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Về chương trình</a>
+</div>
+
+<div class="card mb-3"><div class="card-body">
+    <form method="get" class="row g-2 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label small text-muted mb-0">Lọc theo chương trình</label>
+            <select name="programId" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">— Tất cả chương trình —</option>
+                @foreach (var p in programs)
+                {
+                    <option value="@p.Id" selected="@(programId == p.Id)">@p.Code — @p.Name</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2"><button class="btn btn-sm btn-primary w-100">Lọc</button></div>
+    </form>
+</div></div>
+
+<div class="row g-2 text-center mb-3">
+    <div class="col"><div class="card"><div class="card-body py-2"><div class="text-muted small">Tổng hạn mức</div><div class="fw-bold fs-5">@totalQty</div></div></div></div>
+    <div class="col"><div class="card"><div class="card-body py-2"><div class="text-muted small">Đã dùng</div><div class="fw-bold fs-5">@totalUsed</div></div></div></div>
+    <div class="col"><div class="card"><div class="card-body py-2"><div class="text-muted small">Còn lại</div><div class="fw-bold fs-5" style="color:#db2777">@totalRemain</div></div></div></div>
+</div>
+
+<div class="card"><div class="card-body">
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr>
+            <th>Chương trình</th><th>Loại thẻ</th>
+            <th class="text-center">Hạn mức</th><th class="text-center">Đã dùng</th><th class="text-center">Còn lại</th>
+        </tr></thead>
+        <tbody>
+        @foreach (var r in Model)
+        {
+            <tr>
+                <td class="small"><span class="fw-semibold">@r.ProgramCode</span><div class="text-muted">@r.ProgramName</div></td>
+                <td class="fw-semibold small">@r.CardType</td>
+                <td class="text-center">@r.Qty</td>
+                <td class="text-center">@r.QtyUsed</td>
+                <td class="text-center fw-bold" style="color:#db2777">@r.QtyRemain</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="5" class="text-center text-muted py-4">Chưa có dữ liệu.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

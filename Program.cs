@@ -25,6 +25,7 @@ builder.Services.AddScoped<IVoucherProgramService, VoucherProgramService>();
 builder.Services.AddScoped<ICarPromotionService, CarPromotionService>();
 builder.Services.AddScoped<IPromotionProgramService, PromotionProgramService>();
 builder.Services.AddScoped<ICarRecommendService, CarRecommendService>();
+builder.Services.AddScoped<ICardPromotionProgramService, CardPromotionProgramService>();
 builder.Services.AddFleetObs();
 builder.Services.AddControllersWithViews();
 
@@ -99,6 +100,20 @@ app.MapPost("/api/car-recommend/calc", async (CarRecommendCalcDto dto, ICarRecom
     return Results.Ok(new { ok = r.ok, msg = r.msg, pointVal = r.pointVal, modelCode = r.modelCode });
 });
 
+// Kiểm tra một giao dịch có được dùng ưu đãi của chương trình khuyến mại theo loại thẻ (công khai).
+app.MapPost("/api/card-promotion/check", async (CardPromotionUseDto dto, ICardPromotionProgramService svc) =>
+{
+    var r = await svc.CheckUseAsync(dto.DealerCode ?? "", dto.CardType ?? "", dto.Qty);
+    return Results.Ok(new { ok = r.ok, msg = r.msg, qtyRemain = r.qtyRemain });
+});
+
+// Ghi nhận sử dụng ưu đãi của chương trình khuyến mại theo loại thẻ cho một giao dịch (công khai).
+app.MapPost("/api/card-promotion/use", async (CardPromotionUseDto dto, ICardPromotionProgramService svc) =>
+{
+    var r = await svc.UseAsync(dto.DealNo ?? "", dto.DealerCode ?? "", dto.CardNo ?? "", dto.CardType ?? "", dto.Qty);
+    return Results.Ok(new { ok = r.ok, msg = r.msg, qtyRemain = r.qtyRemain, qtyUsed = r.qtyUsed });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -149,6 +164,7 @@ record VoucherCalcDto(string? ModelCode, DateTime? DeliveryDate, DateTime? Regis
 record CarPromoCalcDto(string? DealerCode, string? ModelCode);
 record PromotionCalcDto(decimal OrderAmount, int Qty, DateTime? At);
 record CarRecommendCalcDto(string? DealerCode, string? ModelCode);
+record CardPromotionUseDto(string? DealNo, string? DealerCode, string? CardNo, string? CardType, int Qty);
 record RegisterOrgDto(string Name);
 record ImportCampaignDto(string? Code, string? Name, string? Description, DateTime? FromDate, DateTime? ToDate, int? Status, int LoseWeight, List<ImportPrizeDto>? Prizes, List<ImportEntryDto>? Entries);
 record ImportPrizeDto(string? Name, string? Tier, decimal Value, int Quantity, int Weight);

@@ -1,0 +1,56 @@
+@model List<CardPromotionProgram>
+@{ ViewData["Title"] = "KM theo loại thẻ"; }
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="fw-bold mb-0">Chương trình khuyến mại theo loại thẻ</h5>
+    <a href="/CardPromotionProgram/Reconciliation" class="btn btn-sm btn-outline-primary"><i class="bi bi-clipboard-check me-1"></i>Đối soát</a>
+</div>
+<div class="row g-3">
+    <div class="col-lg-8"><div class="card"><div class="card-body">
+        <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>Mã</th><th>Tên</th><th>Hiệu lực</th><th class="text-center">Loại thẻ</th><th>Đại lý</th><th>Trạng thái</th></tr></thead>
+            <tbody>
+            @foreach (var p in Model)
+            {
+                var (t, css) = Ui.CardPromotionProgram(p.Status);
+                <tr style="cursor:pointer" onclick="location.href='/CardPromotionProgram/Detail/@p.Id'">
+                    <td class="fw-semibold small">@p.Code</td><td>@p.Name</td>
+                    <td class="small text-muted">@p.EffDateStart.ToString("dd/MM") – @p.EffDateEnd.ToString("dd/MM/yy")</td>
+                    <td class="text-center">@p.Details.Count</td>
+                    <td class="small text-muted">@(p.FlagAllDL ? "Tất cả" : p.Dealers.Count.ToString())</td>
+                    <td><span class="badge bg-@css">@t</span></td>
+                </tr>
+            }
+            @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có chương trình.</td></tr> }
+            </tbody>
+        </table>
+    </div></div></div>
+    <div class="col-lg-4">
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Tạo chương trình</h6>
+            <form asp-action="Create" method="post">@Html.AntiForgeryToken()
+                <div class="mb-2"><input name="name" class="form-control" placeholder="Tên chương trình *" required /></div>
+                <div class="mb-2"><input name="code" class="form-control text-uppercase" placeholder="Mã (tự sinh)" /></div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><label class="form-label small text-muted">Hiệu lực từ</label><input name="effDateStart" type="date" value="@DateTime.Today.ToString("yyyy-MM-dd")" class="form-control form-control-sm" /></div>
+                    <div class="col-6"><label class="form-label small text-muted">Đến</label><input name="effDateEnd" type="date" value="@DateTime.Today.AddMonths(1).ToString("yyyy-MM-dd")" class="form-control form-control-sm" /></div>
+                </div>
+                <div class="form-check mb-2"><input name="flagAllDL" type="checkbox" value="true" class="form-check-input" id="allDL" checked /><label class="form-check-label small" for="allDL">Áp dụng tất cả đại lý</label></div>
+                <div class="mb-3"><textarea name="remark" class="form-control form-control-sm" rows="2" placeholder="Ghi chú"></textarea></div>
+                <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Tạo</button>
+            </form>
+        </div></div>
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3">Ghi nhận sử dụng ưu đãi</h6>
+            <form asp-action="Use" method="post">@Html.AntiForgeryToken()
+                <div class="mb-2"><input name="dealNo" class="form-control form-control-sm" placeholder="Số giao dịch *" required /></div>
+                <div class="mb-2"><input name="dealerCode" class="form-control form-control-sm text-uppercase" placeholder="Mã đại lý *" required /></div>
+                <div class="mb-2"><input name="cardNo" class="form-control form-control-sm" placeholder="Số thẻ" /></div>
+                <div class="row g-2 mb-3">
+                    <div class="col-7"><input name="cardType" class="form-control form-control-sm text-uppercase" placeholder="Loại thẻ *" required /></div>
+                    <div class="col-5"><input name="qty" type="number" min="1" value="1" class="form-control form-control-sm" placeholder="SL" /></div>
+                </div>
+                <button class="btn btn-outline-primary w-100"><i class="bi bi-check2-circle me-1"></i>Ghi nhận</button>
+            </form>
+        </div></div>
+    </div>
+</div>

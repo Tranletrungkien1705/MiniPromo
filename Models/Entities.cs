@@ -321,3 +321,69 @@ public class CarRecommendDtl : IOrgOwned
     public decimal PointVal { get; set; }                   // Giá trị thưởng cho model này
     public string? Remark { get; set; }
 }
+
+// Trạng thái chương trình khuyến mại theo loại thẻ — theo nguồn Mst_PromotionProgram.FlagActive.
+public enum CardPromotionProgramStatus { Inactive = 0, Active = 1 }
+
+// Chương trình khuyến mại theo loại thẻ — port từ Mst_PromotionProgram của hệ Loyalty.
+// Mỗi chương trình cấp một số lượng ưu đãi (Qty) cho từng loại thẻ (CardType); phạm vi đại lý
+// áp dụng lưu ở CardPromotionProgramSpec (hoặc tất cả đại lý khi FlagAllDL).
+// Số lượng đã dùng theo từng chương trình được ghi nhận ở CardPromotionUsage.
+public class CardPromotionProgram : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";                 // PrProgramCode
+    public string Name { get; set; } = "";                 // PrProgramName
+    public DateTime EffDateStart { get; set; } = DateTime.Today;
+    public DateTime EffDateEnd { get; set; } = DateTime.Today.AddMonths(1);
+    public bool FlagAllDL { get; set; } = true;             // Áp dụng cho tất cả đại lý
+    public CardPromotionProgramStatus Status { get; set; } = CardPromotionProgramStatus.Inactive;
+    public string? Remark { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public List<CardPromotionProgramDtl> Details { get; set; } = new();
+    public List<CardPromotionProgramSpec> Dealers { get; set; } = new();
+
+    public bool IsLiveNow => Status == CardPromotionProgramStatus.Active && DateTime.Today >= EffDateStart.Date && DateTime.Today <= EffDateEnd.Date;
+}
+
+// Dòng chi tiết theo loại thẻ — port từ Mst_PromotionProgramDtl.
+public class CardPromotionProgramDtl : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int CardPromotionProgramId { get; set; }
+    public CardPromotionProgram? CardPromotionProgram { get; set; }
+    public string CardType { get; set; } = "";             // Loại thẻ áp dụng
+    public int Qty { get; set; }                            // Số lượng ưu đãi cấp cho loại thẻ
+    public string? Unit { get; set; }                       // Đơn vị tính
+    public bool FlagActive { get; set; } = true;
+    public string? Remark { get; set; }
+}
+
+// Phạm vi đại lý áp dụng — port từ Mst_PromotionProgramSpec.
+public class CardPromotionProgramSpec : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int CardPromotionProgramId { get; set; }
+    public CardPromotionProgram? CardPromotionProgram { get; set; }
+    public string DealerCode { get; set; } = "";           // DLCode — đại lý áp dụng
+}
+
+// Nhật ký sử dụng ưu đãi của một giao dịch — port từ Crd_DealUsePromotion + Crd_DealUsePromotionDtl.
+// Mỗi lần dùng ghi nhận số lượng ưu đãi đã dùng (QtyUsed) cho một chương trình theo loại thẻ.
+public class CardPromotionUsage : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string DealNo { get; set; } = "";               // Số giao dịch
+    public string DealerCode { get; set; } = "";           // DLCPCode — đại lý thực hiện
+    public string CardNo { get; set; } = "";               // Số thẻ
+    public string CardType { get; set; } = "";             // Loại thẻ
+    public int CardPromotionProgramId { get; set; }
+    public CardPromotionProgram? CardPromotionProgram { get; set; }
+    public int QtyUsed { get; set; }                        // Số lượng ưu đãi đã dùng trong lần này
+    public DateTime UsedAt { get; set; } = DateTime.UtcNow;
+    public string? Remark { get; set; }
+}

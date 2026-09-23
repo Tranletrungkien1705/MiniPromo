@@ -12,7 +12,7 @@ namespace MiniPromo.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Produces("application/json")]
-public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICache cache, ITenantContext tenant) : ControllerBase
+public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, ICache cache, ITenantContext tenant) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard()
@@ -559,6 +559,93 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
         return o.ok ? Ok(new { ok = o.ok, msg = o.msg, pointVal = o.pointVal, modelCode = o.modelCode })
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
+
+    // ---- Chương trình khuyến mại theo loại thẻ (port từ Mst_PromotionProgram) ----
+    [HttpGet("card-promotion-programs")]
+    public async Task<IActionResult> CardPromotionPrograms()
+        => Ok((await cardPrograms.ProgramsAsync()).Select(p => new
+        {
+            p.Id, p.Code, p.Name, p.EffDateStart, p.EffDateEnd, p.FlagAllDL,
+            status = (int)p.Status, statusText = Ui.CardPromotionProgram(p.Status).text, statusCss = Ui.CardPromotionProgram(p.Status).css,
+            live = p.IsLiveNow, details = p.Details.Count, dealers = p.Dealers.Count
+        }));
+
+    [HttpGet("card-promotion-programs/{id:int}")]
+    public async Task<IActionResult> CardPromotionProgram(int id)
+    {
+        var p = await cardPrograms.GetProgramAsync(id);
+        if (p == null) return NotFound(new { error = "Không tìm thấy chương trình." });
+        return Ok(new
+        {
+            p.Id, p.Code, p.Name, p.EffDateStart, p.EffDateEnd, p.FlagAllDL, p.Remark,
+            status = (int)p.Status, statusText = Ui.CardPromotionProgram(p.Status).text, live = p.IsLiveNow,
+            details = p.Details.Select(d => new { d.Id, d.CardType, d.Qty, d.Unit, d.FlagActive, d.Remark }),
+            dealers = p.Dealers.Select(s => new { s.Id, s.DealerCode })
+        });
+    }
+
+    [HttpPost("card-promotion-programs")]
+    public async Task<IActionResult> CreateCardPromotionProgram([FromBody] CardPromotionProgramReq r)
+    {
+        var (ok, msg, id) = await cardPrograms.CreateProgramAsync(new CardPromotionProgram
+        {
+            Code = r.Code ?? "", Name = r.Name,
+            EffDateStart = r.EffDateStart == default ? DateTime.Today : r.EffDateStart,
+            EffDateEnd = r.EffDateEnd == default ? DateTime.Today.AddMonths(1) : r.EffDateEnd,
+            FlagAllDL = r.FlagAllDL, Remark = r.Remark
+        });
+        return ok ? Ok(new { id }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("card-promotion-programs/{id:int}/details")]
+    public async Task<IActionResult> AddCardPromotionProgramDetail(int id, [FromBody] CardPromotionProgramDtlReq r)
+    {
+        var (ok, msg) = await cardPrograms.AddDetailAsync(new CardPromotionProgramDtl
+        {
+            CardPromotionProgramId = id, CardType = r.CardType ?? "", Qty = r.Qty, Unit = r.Unit, Remark = r.Remark
+        });
+        return ok ? Ok(new { ok }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("card-promotion-programs/{id:int}/dealers")]
+    public async Task<IActionResult> AddCardPromotionProgramDealer(int id, [FromBody] CardPromotionProgramSpecReq r)
+    {
+        var (ok, msg) = await cardPrograms.AddDealerAsync(new CardPromotionProgramSpec { CardPromotionProgramId = id, DealerCode = r.DealerCode ?? "" });
+        return ok ? Ok(new { ok }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("card-promotion-programs/{id:int}/status")]
+    public async Task<IActionResult> SetCardPromotionProgramStatus(int id, [FromBody] StatusReq r)
+    {
+        var (ok, msg) = await cardPrograms.SetStatusAsync(id, (CardPromotionProgramStatus)r.Status);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Đối soát số lượng ưu đãi đã dùng theo chương trình + loại thẻ.
+    [HttpGet("card-promotion-programs/reconciliation")]
+    public async Task<IActionResult> CardPromotionReconciliation([FromQuery] int? programId)
+        => Ok((await cardPrograms.ReconciliationAsync(programId)).Select(r => new
+        {
+            r.CardPromotionProgramId, r.ProgramCode, r.ProgramName, r.CardType, r.Qty, r.QtyUsed, r.QtyRemain
+        }));
+
+    // Kiểm tra một giao dịch có được dùng ưu đãi của chương trình theo loại thẻ (công khai).
+    [HttpPost("card-promotion/check")]
+    public async Task<IActionResult> CheckCardPromotion([FromBody] CardPromotionUseReq r)
+    {
+        var o = await cardPrograms.CheckUseAsync(r.DealerCode ?? "", r.CardType ?? "", r.Qty);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, qtyRemain = o.qtyRemain })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
+
+    // Ghi nhận sử dụng ưu đãi của chương trình theo loại thẻ cho một giao dịch (công khai).
+    [HttpPost("card-promotion/use")]
+    public async Task<IActionResult> UseCardPromotion([FromBody] CardPromotionUseReq r)
+    {
+        var o = await cardPrograms.UseAsync(r.DealNo ?? "", r.DealerCode ?? "", r.CardNo ?? "", r.CardType ?? "", r.Qty);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, qtyRemain = o.qtyRemain, qtyUsed = o.qtyUsed })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
 }
 
 public record DashDto(int Campaigns, int Running, int TotalPlays, int TotalWins, decimal ValueAwarded, List<TopDto> Top);
@@ -588,3 +675,7 @@ public class PromotionCalcReq { public decimal OrderAmount { get; set; } public 
 public class CarRecommendReq { public string? Code { get; set; } public string Name { get; set; } = ""; public string? DealerCode { get; set; } public DateTime EffDateStart { get; set; } public DateTime EffDateEnd { get; set; } public bool FlagAllModel { get; set; } = true; public decimal PointValAllModel { get; set; } public string? Remark { get; set; } }
 public class CarRecommendDtlReq { public string? ModelCode { get; set; } public decimal PointVal { get; set; } public string? Remark { get; set; } }
 public class CarRecommendCalcReq { public string? DealerCode { get; set; } public string? ModelCode { get; set; } }
+public class CardPromotionProgramReq { public string? Code { get; set; } public string Name { get; set; } = ""; public DateTime EffDateStart { get; set; } public DateTime EffDateEnd { get; set; } public bool FlagAllDL { get; set; } = true; public string? Remark { get; set; } }
+public class CardPromotionProgramDtlReq { public string? CardType { get; set; } public int Qty { get; set; } public string? Unit { get; set; } public string? Remark { get; set; } }
+public class CardPromotionProgramSpecReq { public string? DealerCode { get; set; } }
+public class CardPromotionUseReq { public string? DealNo { get; set; } public string? DealerCode { get; set; } public string? CardNo { get; set; } public string? CardType { get; set; } public int Qty { get; set; } }
