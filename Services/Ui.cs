@@ -188,4 +188,11 @@ public static class Ui
         RankActionType.Down => "Hạ hạng",
         _ => a.ToString()
     };
+
+    public static (string text, string css) PolicyMoneyToPoint(PolicyMoneyToPointStatus s) => s switch
+    {
+        PolicyMoneyToPointStatus.Active   => ("Đang bật", "success"),
+        PolicyMoneyToPointStatus.Inactive => ("Tạm dừng", "secondary"),
+        _ => (s.ToString(), "secondary")
+    };
 }

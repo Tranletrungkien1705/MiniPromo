@@ -1,0 +1,66 @@
+@model PolicyMoneyToPoint
+@{ ViewData["Title"] = Model.Name; var (t, css) = Ui.PolicyMoneyToPoint(Model.Status); }
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card mb-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h5 class="fw-bold mb-1">@Model.Name <span class="badge bg-@css ms-1">@t</span></h5>
+                    <div class="text-muted small">Mã <b>@Model.Code</b> · Hiệu lực @Model.EffDateStart.ToString("dd/MM/yyyy") – @Model.EffDateEnd.ToString("dd/MM/yyyy")</div>
+                    @if (!string.IsNullOrEmpty(Model.Remark)) { <div class="small mt-1">@Model.Remark</div> }
+                </div>
+                <div class="text-end">
+                    @if (Model.Status == PolicyMoneyToPointStatus.Inactive) { <form asp-action="SetStatus" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="status" value="1" /><button class="btn btn-sm btn-success">Bật</button></form> }
+                    else { <form asp-action="SetStatus" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="status" value="0" /><button class="btn btn-sm btn-outline-dark">Tạm dừng</button></form> }
+                </div>
+            </div>
+        </div></div>
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-2">Tỷ lệ quy đổi theo hạng thẻ</h6>
+            <table class="table table-sm align-middle">
+                <thead><tr><th>Hạng thẻ</th><th class="text-end">Giá trị quy đổi</th><th class="text-end">Điểm quy đổi</th><th class="text-end">Mốc lượt hạng</th><th class="text-end">Chiết khấu</th></tr></thead>
+                <tbody>
+                @foreach (var d in Model.Details)
+                {
+                    <tr>
+                        <td class="fw-semibold">@d.CardType</td>
+                        <td class="text-end">@d.ConvertValue.ToString("N0")</td>
+                        <td class="text-end">@d.ConvertPoint.ToString("N0")</td>
+                        <td class="text-end">@d.ValueRankCardType.ToString("N0")</td>
+                        <td class="text-end">@d.DiscountRate%</td>
+                    </tr>
+                }
+                @if (Model.Details.Count == 0) { <tr><td colspan="5" class="text-center text-muted py-3">Chưa có dòng hạng thẻ.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Thêm hạng thẻ</h6>
+            <form asp-action="AddDetail" method="post">@Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <div class="mb-2"><input name="cardType" class="form-control form-control-sm text-uppercase" placeholder="Hạng thẻ *" required /></div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><label class="form-label small text-muted">Giá trị quy đổi</label><input name="convertValue" type="number" step="0.01" value="1000" class="form-control form-control-sm" /></div>
+                    <div class="col-6"><label class="form-label small text-muted">Điểm quy đổi</label><input name="convertPoint" type="number" step="0.01" value="1" class="form-control form-control-sm" /></div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><label class="form-label small text-muted">Mốc lượt hạng</label><input name="valueRankCardType" type="number" step="0.01" value="0" class="form-control form-control-sm" /></div>
+                    <div class="col-6"><label class="form-label small text-muted">Chiết khấu (%)</label><input name="discountRate" type="number" step="0.01" value="0" class="form-control form-control-sm" /></div>
+                </div>
+                <div class="mb-3"><textarea name="remark" class="form-control form-control-sm" rows="2" placeholder="Ghi chú"></textarea></div>
+                <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Thêm</button>
+            </form>
+        </div></div>
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3">Quy đổi thử</h6>
+            <form asp-action="Calc" method="post">@Html.AntiForgeryToken()
+                <div class="mb-2"><input name="cardType" class="form-control form-control-sm text-uppercase" placeholder="Hạng thẻ *" required /></div>
+                <div class="mb-2"><input name="amount" type="number" step="0.01" class="form-control form-control-sm" placeholder="Số tiền dịch vụ" /></div>
+                <div class="mb-3"><input name="at" type="date" class="form-control form-control-sm" /></div>
+                <button class="btn btn-outline-primary w-100"><i class="bi bi-calculator me-1"></i>Quy đổi</button>
+            </form>
+        </div></div>
+    </div>
+</div>

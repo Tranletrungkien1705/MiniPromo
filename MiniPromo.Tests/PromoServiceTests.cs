@@ -2010,3 +2010,146 @@ public class RankPolicyServiceTests
         }
     }
 }
+/// <summary>Test chính sách quy đổi tiền dịch vụ → điểm: chỉ chính sách đang bật + trong hiệu lực,
+/// tỷ lệ theo hạng thẻ, mốc lượt xét hạng, chiết khấu, chặn trùng hạng thẻ.</summary>
+public class PolicyMoneyToPointServiceTests
+{
+    private static (AppDbContext db, IPolicyMoneyToPointService svc, SqliteConnection conn) NewSvc()
+    {
+        var conn = new SqliteConnection("DataSource=:memory:"); conn.Open();
+        var opt = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conn).Options;
+        var db = new AppDbContext(opt, new TenantContext { OrgId = TenantContext.DefaultOrgId });
+        db.Database.EnsureCreated();
+        return (db, new PolicyMoneyToPointService(db), conn);
+    }
+
+    // Tạo chính sách đang bật với 2 hạng: GOLD (1000đ→2 điểm, mốc 1.000.000, ck 5%), SILVER (1000đ→1 điểm).
+    private static async Task<PolicyMoneyToPoint> ActivePolicy(IPolicyMoneyToPointService svc)
+    {
+        var (_, _, id) = await svc.CreatePolicyAsync(new PolicyMoneyToPoint
+        {
+            Code = "PMTP", Name = "Quy đổi", EffDateStart = DateTime.Today.AddDays(-1), EffDateEnd = DateTime.Today.AddDays(10)
+        });
+        await svc.AddDetailAsync(new PolicyMoneyToPointDtl { PolicyMoneyToPointId = id, CardType = "GOLD", ConvertValue = 1_000, ConvertPoint = 2, ValueRankCardType = 1_000_000, DiscountRate = 5 });
+        await svc.AddDetailAsync(new PolicyMoneyToPointDtl { PolicyMoneyToPointId = id, CardType = "SILVER", ConvertValue = 1_000, ConvertPoint = 1, ValueRankCardType = 500_000, DiscountRate = 0 });
+        await svc.SetStatusAsync(id, PolicyMoneyToPointStatus.Active);
+        return (await svc.GetPolicyAsync(id))!;
+    }
+
+    [Fact]
+    public async Task Create_RequiresCode_And_DuplicateRejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var a = await svc.CreatePolicyAsync(new PolicyMoneyToPoint { Code = "A" });
+            Assert.True(a.ok);
+            var b = await svc.CreatePolicyAsync(new PolicyMoneyToPoint { Code = "A" });
+            Assert.False(b.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Activate_WithoutDetails_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreatePolicyAsync(new PolicyMoneyToPoint { Code = "P" });
+            var o = await svc.SetStatusAsync(id, PolicyMoneyToPointStatus.Active);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task AddDetail_RequiresPositiveConvertValue()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreatePolicyAsync(new PolicyMoneyToPoint { Code = "P" });
+            var o = await svc.AddDetailAsync(new PolicyMoneyToPointDtl { PolicyMoneyToPointId = id, CardType = "GOLD", ConvertValue = 0, ConvertPoint = 1 });
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task AddDetail_DuplicateCardType_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreatePolicyAsync(new PolicyMoneyToPoint { Code = "P" });
+            await svc.AddDetailAsync(new PolicyMoneyToPointDtl { PolicyMoneyToPointId = id, CardType = "GOLD", ConvertValue = 1_000, ConvertPoint = 1 });
+            var o = await svc.AddDetailAsync(new PolicyMoneyToPointDtl { PolicyMoneyToPointId = id, CardType = "GOLD", ConvertValue = 2_000, ConvertPoint = 2 });
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_NoActivePolicy_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var o = await svc.CalcAsync("GOLD", 1_000_000, null);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_ConvertsByRate()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActivePolicy(svc);
+            // GOLD: 1.000đ → 2 điểm ⇒ 500.000đ → 1.000 điểm.
+            var o = await svc.CalcAsync("GOLD", 500_000, null);
+            Assert.True(o.ok);
+            Assert.Equal(1_000m, o.point);
+            Assert.Equal(5m, o.discountRate);
+            Assert.Equal(0, o.qtyVisit);   // 500.000 < mốc 1.000.000
+        }
+    }
+
+    [Fact]
+    public async Task Calc_QtyVisit_WhenAmountReachesRankThreshold()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActivePolicy(svc);
+            var o = await svc.CalcAsync("GOLD", 1_000_000, null);
+            Assert.True(o.ok);
+            Assert.Equal(1, o.qtyVisit);   // đạt mốc 1.000.000 → 1 lượt xét hạng
+        }
+    }
+
+    [Fact]
+    public async Task Calc_UnknownCardType_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActivePolicy(svc);
+            var o = await svc.CalcAsync("BRONZE", 1_000_000, null);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_OutsideEffectiveWindow_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActivePolicy(svc);
+            var o = await svc.CalcAsync("GOLD", 1_000_000, DateTime.Today.AddDays(30));
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_InactivePolicy_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var p = await ActivePolicy(svc);
+            await svc.SetStatusAsync(p.Id, PolicyMoneyToPointStatus.Inactive);
+            var o = await svc.CalcAsync("GOLD", 1_000_000, null);
+            Assert.False(o.ok);
+        }
+    }
+}

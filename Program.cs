@@ -30,6 +30,7 @@ builder.Services.AddScoped<IBirthdayPolicyService, BirthdayPolicyService>();
 builder.Services.AddScoped<IIssueVoucherService, IssueVoucherService>();
 builder.Services.AddScoped<IParamPromotionService, ParamPromotionService>();
 builder.Services.AddScoped<IRankPolicyService, RankPolicyService>();
+builder.Services.AddScoped<IPolicyMoneyToPointService, PolicyMoneyToPointService>();
 builder.Services.AddFleetObs();
 builder.Services.AddControllersWithViews();
 
@@ -160,6 +161,13 @@ app.MapPost("/api/rank-policy/evaluate", async (RankEvalDto dto, IRankPolicyServ
     return Results.Ok(new { ok = r.ok, msg = r.msg, action = (int)r.action, cardType = r.cardType, value = r.value });
 });
 
+// Quy đổi tiền dịch vụ → điểm cho một hạng thẻ theo chính sách đang hiệu lực (công khai).
+app.MapPost("/api/policy-money-to-point/calc", async (MoneyToPointCalcDto dto, IPolicyMoneyToPointService svc) =>
+{
+    var r = await svc.CalcAsync(dto.CardType ?? "", dto.Amount, dto.At);
+    return Results.Ok(new { ok = r.ok, msg = r.msg, policyCode = r.policyCode, cardType = r.cardType, amount = r.amount, point = r.point, discountRate = r.discountRate, qtyVisit = r.qtyVisit, valueRankCardType = r.valueRankCardType });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -216,6 +224,7 @@ record BirthdayGrantDto(string? MemberNo, string? CardNo, string? CardType, stri
 record IssueUseDto(string? VoucherNo, string? OrderNo, DateTime? At);
 record ParamWindowDto(string? ProgramCode, string? TypeCode, DateTime? Anchor);
 record RankEvalDto(string? CardType, decimal Point, int QtyVisit);
+record MoneyToPointCalcDto(string? CardType, decimal Amount, DateTime? At);
 record RegisterOrgDto(string Name);
 record ImportCampaignDto(string? Code, string? Name, string? Description, DateTime? FromDate, DateTime? ToDate, int? Status, int LoseWeight, List<ImportPrizeDto>? Prizes, List<ImportEntryDto>? Entries);
 record ImportPrizeDto(string? Name, string? Tier, decimal Value, int Quantity, int Weight);

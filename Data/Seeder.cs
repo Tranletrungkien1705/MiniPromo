@@ -167,13 +167,30 @@ public static class Seeder
                 new RankPolicy { Code = "RP-PLATINUM", CardType = "PLATINUM", Value = 3, PointUpBegin = 20_000, PointUpEnd = 0, QtyVisitUpBegin = 20, QtyVisitUpEnd = 0, PointKeepBegin = 10_000, PointKeepEnd = 0, QtyVisitKeepBegin = 10, QtyVisitKeepEnd = 0, QtyMonth = 12, Status = RankPolicyStatus.Active, Remark = "Hạng cao nhất — chỉ cần duy trì." });
             await db.SaveChangesAsync();
         }
+
+        if (!await db.PolicyMoneyToPoints.AnyAsync())
+        {
+            var pmtp = new PolicyMoneyToPoint
+            {
+                Code = "PMTP2026", Name = "Quy đổi tiền dịch vụ → điểm 2026",
+                EffDateStart = DateTime.Today.AddDays(-3), EffDateEnd = DateTime.Today.AddMonths(2),
+                Status = PolicyMoneyToPointStatus.Active,
+                Remark = "Cứ 1.000đ tiền dịch vụ đổi 1 điểm; hạng cao đổi nhiều điểm hơn và có chiết khấu dịch vụ."
+            };
+            db.PolicyMoneyToPoints.Add(pmtp); await db.SaveChangesAsync();
+            db.PolicyMoneyToPointDtls.AddRange(
+                new PolicyMoneyToPointDtl { PolicyMoneyToPointId = pmtp.Id, CardType = "SILVER", ConvertValue = 1_000, ConvertPoint = 1, ValueRankCardType = 500_000, DiscountRate = 0 },
+                new PolicyMoneyToPointDtl { PolicyMoneyToPointId = pmtp.Id, CardType = "GOLD", ConvertValue = 1_000, ConvertPoint = 2, ValueRankCardType = 1_000_000, DiscountRate = 5 },
+                new PolicyMoneyToPointDtl { PolicyMoneyToPointId = pmtp.Id, CardType = "PLATINUM", ConvertValue = 1_000, ConvertPoint = 3, ValueRankCardType = 2_000_000, DiscountRate = 10 });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "PromotionProductScopes", "CarRecommends", "CarRecommendDtls", "CardPromotionPrograms", "CardPromotionProgramDtls", "CardPromotionProgramSpecs", "CardPromotionUsages", "BirthdayPolicies", "BirthdayPolicyDtls", "BirthdayGrants", "IssueVouchers", "IssueVoucherDtls", "IssueVoucherScopes", "IssueVoucherProducts", "IssueVoucherPrices", "RankPolicies" };
+        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "PromotionProductScopes", "CarRecommends", "CarRecommendDtls", "CardPromotionPrograms", "CardPromotionProgramDtls", "CardPromotionProgramSpecs", "CardPromotionUsages", "BirthdayPolicies", "BirthdayPolicyDtls", "BirthdayGrants", "IssueVouchers", "IssueVoucherDtls", "IssueVoucherScopes", "IssueVoucherProducts", "IssueVoucherPrices", "RankPolicies", "PolicyMoneyToPoints", "PolicyMoneyToPointDtls" };
         var sql = new List<string> {
             "CREATE TABLE IF NOT EXISTS minipromo.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON minipromo.\"Orgs\" (\"ApiKey\")" };

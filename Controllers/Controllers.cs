@@ -684,3 +684,59 @@ public class RankPolicyController(IRankPolicyService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 }
+
+// Chính sách quy đổi tiền dịch vụ → điểm (port từ Mst_PolicyMoneyToPointService).
+public class PolicyMoneyToPointController(IPolicyMoneyToPointService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.PoliciesAsync());
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string name, string? code, DateTime effDateStart, DateTime effDateEnd, string? remark)
+    {
+        var (ok, msg, id) = await svc.CreatePolicyAsync(new PolicyMoneyToPoint
+        {
+            Name = name ?? "", Code = (code ?? "").Trim().ToUpper(),
+            EffDateStart = effDateStart == default ? DateTime.Today : effDateStart,
+            EffDateEnd = effDateEnd == default ? DateTime.Today.AddMonths(1) : effDateEnd,
+            Remark = remark
+        });
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Detail), new { id }) : RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var p = await svc.GetPolicyAsync(id);
+        if (p == null) return NotFound();
+        return View(p);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddDetail(int id, string cardType, decimal convertValue, decimal convertPoint, decimal valueRankCardType, decimal discountRate, string? remark)
+    {
+        var (ok, msg) = await svc.AddDetailAsync(new PolicyMoneyToPointDtl
+        {
+            PolicyMoneyToPointId = id, CardType = cardType ?? "", ConvertValue = convertValue,
+            ConvertPoint = convertPoint, ValueRankCardType = valueRankCardType, DiscountRate = discountRate, Remark = remark
+        });
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetStatus(int id, PolicyMoneyToPointStatus status)
+    {
+        var (ok, msg) = await svc.SetStatusAsync(id, status);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Quy đổi tiền dịch vụ → điểm cho một hạng thẻ theo chính sách đang hiệu lực.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Calc(string cardType, decimal amount, DateTime? at)
+    {
+        var o = await svc.CalcAsync(cardType ?? "", amount, at);
+        TempData[o.ok ? "Success" : "Error"] = o.ok
+            ? $"Hạng {o.cardType}: {o.amount.ToString("N0")}đ → {o.point.ToString("N0")} điểm (chiết khấu {o.discountRate}%, lượt xét hạng {o.qtyVisit})."
+            : o.msg;
+        return RedirectToAction(nameof(Index));
+    }
+}

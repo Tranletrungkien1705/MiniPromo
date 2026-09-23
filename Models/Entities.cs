@@ -644,3 +644,46 @@ public class RankPolicy : IOrgOwned
 
     public bool IsActive => Status == RankPolicyStatus.Active;
 }
+
+// Trạng thái chính sách quy đổi tiền dịch vụ → điểm — theo nguồn Mst_PolicyMoneyToPointService.FlagActive.
+public enum PolicyMoneyToPointStatus { Inactive = 0, Active = 1 }
+
+// Chính sách quy đổi tiền dịch vụ → điểm — port từ Mst_PolicyMoneyToPointService của hệ Loyalty.
+// Vòng đời: Tạm dừng ↔ Đang bật (FlagActive). Điều kiện áp dụng: trong khoảng EffDateStart..EffDateEnd.
+// Mỗi hạng thẻ (CardType) có tỷ lệ quy đổi riêng ở PolicyMoneyToPointDtl: cứ ConvertValue tiền dịch vụ
+// thì được ConvertPoint điểm; ValueRankCardType là mốc doanh thu để tính 1 lượt xét hạng; DiscountRate là
+// % chiết khấu dịch vụ. Nguồn: Mst_PolicyMoneyToPointService + Mst_PolicyMoneyToPointServiceDtl.
+public class PolicyMoneyToPoint : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";                 // PolicyCode — mã chính sách
+    public string Name { get; set; } = "";                 // Tên chính sách (bổ sung cho dễ nhìn)
+    public DateTime EffDateStart { get; set; } = DateTime.Today;
+    public DateTime EffDateEnd { get; set; } = DateTime.Today.AddMonths(1);
+    public PolicyMoneyToPointStatus Status { get; set; } = PolicyMoneyToPointStatus.Inactive;
+    public string? Remark { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public List<PolicyMoneyToPointDtl> Details { get; set; } = new();
+
+    public bool IsLiveNow => Status == PolicyMoneyToPointStatus.Active && DateTime.Today >= EffDateStart.Date && DateTime.Today <= EffDateEnd.Date;
+}
+
+// Dòng chi tiết theo hạng thẻ — port từ Mst_PolicyMoneyToPointServiceDtl.
+public class PolicyMoneyToPointDtl : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int PolicyMoneyToPointId { get; set; }
+    public PolicyMoneyToPoint? PolicyMoneyToPoint { get; set; }
+    public string CardType { get; set; } = "";             // Hạng thẻ áp dụng
+    public decimal ConvertValue { get; set; }               // Giá trị quy đổi (số tiền)
+    public decimal ConvertPoint { get; set; }               // Điểm quy đổi tương ứng
+    public decimal ValueRankCardType { get; set; }          // Mốc doanh thu để tính 1 lượt xét hạng
+    public decimal DiscountRate { get; set; }               // % chiết khấu dịch vụ (0..100)
+    public bool FlagActive { get; set; } = true;
+    public string? Remark { get; set; }
+
+    // Tỷ lệ quy đổi: cứ ConvertValue tiền thì được ConvertPoint điểm.
+    public decimal Rate => ConvertValue > 0 ? ConvertPoint / ConvertValue : 0;
+}

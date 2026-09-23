@@ -40,6 +40,8 @@ public class AppDbContext : DbContext
     public DbSet<ParamPromotionType> ParamPromotionTypes => Set<ParamPromotionType>();
     public DbSet<ParamPromotion> ParamPromotions => Set<ParamPromotion>();
     public DbSet<RankPolicy> RankPolicies => Set<RankPolicy>();
+    public DbSet<PolicyMoneyToPoint> PolicyMoneyToPoints => Set<PolicyMoneyToPoint>();
+    public DbSet<PolicyMoneyToPointDtl> PolicyMoneyToPointDtls => Set<PolicyMoneyToPointDtl>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -250,6 +252,22 @@ public class AppDbContext : DbContext
             e.Property(x => x.PointKeepBegin).HasPrecision(18, 2);
             e.Property(x => x.PointKeepEnd).HasPrecision(18, 2);
             e.Ignore(x => x.IsActive);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PolicyMoneyToPoint>(e =>
+        {
+            e.HasIndex(x => x.Code).IsUnique();           // Mã chính sách quy đổi — duy nhất
+            e.Ignore(x => x.IsLiveNow);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PolicyMoneyToPointDtl>(e =>
+        {
+            e.Property(x => x.ConvertValue).HasPrecision(18, 2);
+            e.Property(x => x.ConvertPoint).HasPrecision(18, 2);
+            e.Property(x => x.ValueRankCardType).HasPrecision(18, 2);
+            e.Property(x => x.DiscountRate).HasPrecision(18, 2);
+            e.Ignore(x => x.Rate);
+            e.HasOne(x => x.PolicyMoneyToPoint).WithMany(x => x.Details).HasForeignKey(x => x.PolicyMoneyToPointId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

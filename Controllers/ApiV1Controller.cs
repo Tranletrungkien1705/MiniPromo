@@ -12,7 +12,7 @@ namespace MiniPromo.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Produces("application/json")]
-public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IIssueVoucherService issueVouchers, IParamPromotionService paramPromotions, IRankPolicyService rankPolicies, ICache cache, ITenantContext tenant) : ControllerBase
+public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IIssueVoucherService issueVouchers, IParamPromotionService paramPromotions, IRankPolicyService rankPolicies, IPolicyMoneyToPointService moneyToPoints, ICache cache, ITenantContext tenant) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard()
@@ -991,6 +991,69 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
         return o.ok ? Ok(new { ok = o.ok, msg = o.msg, action = (int)o.action, actionText = Ui.RankActionText(o.action), cardType = o.cardType, value = o.value })
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
+
+    // ---- Chính sách quy đổi tiền dịch vụ → điểm (port từ Mst_PolicyMoneyToPointService) ----
+    [HttpGet("policy-money-to-points")]
+    public async Task<IActionResult> PolicyMoneyToPoints()
+        => Ok((await moneyToPoints.PoliciesAsync()).Select(p => new
+        {
+            p.Id, p.Code, p.Name, p.EffDateStart, p.EffDateEnd,
+            status = (int)p.Status, statusText = Ui.PolicyMoneyToPoint(p.Status).text, statusCss = Ui.PolicyMoneyToPoint(p.Status).css,
+            live = p.IsLiveNow, details = p.Details.Count
+        }));
+
+    [HttpGet("policy-money-to-points/{id:int}")]
+    public async Task<IActionResult> PolicyMoneyToPoint(int id)
+    {
+        var p = await moneyToPoints.GetPolicyAsync(id);
+        if (p == null) return NotFound(new { error = "Không tìm thấy chính sách." });
+        return Ok(new
+        {
+            p.Id, p.Code, p.Name, p.EffDateStart, p.EffDateEnd, p.Remark,
+            status = (int)p.Status, statusText = Ui.PolicyMoneyToPoint(p.Status).text, live = p.IsLiveNow,
+            details = p.Details.Select(d => new { d.Id, d.CardType, d.ConvertValue, d.ConvertPoint, d.ValueRankCardType, d.DiscountRate, d.FlagActive, d.Remark })
+        });
+    }
+
+    [HttpPost("policy-money-to-points")]
+    public async Task<IActionResult> CreatePolicyMoneyToPoint([FromBody] PolicyMoneyToPointReq r)
+    {
+        var (ok, msg, id) = await moneyToPoints.CreatePolicyAsync(new PolicyMoneyToPoint
+        {
+            Code = r.Code ?? "", Name = r.Name,
+            EffDateStart = r.EffDateStart == default ? DateTime.Today : r.EffDateStart,
+            EffDateEnd = r.EffDateEnd == default ? DateTime.Today.AddMonths(1) : r.EffDateEnd,
+            Remark = r.Remark
+        });
+        return ok ? Ok(new { id }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("policy-money-to-points/{id:int}/details")]
+    public async Task<IActionResult> AddPolicyMoneyToPointDetail(int id, [FromBody] PolicyMoneyToPointDtlReq r)
+    {
+        var (ok, msg) = await moneyToPoints.AddDetailAsync(new PolicyMoneyToPointDtl
+        {
+            PolicyMoneyToPointId = id, CardType = r.CardType ?? "", ConvertValue = r.ConvertValue,
+            ConvertPoint = r.ConvertPoint, ValueRankCardType = r.ValueRankCardType, DiscountRate = r.DiscountRate, Remark = r.Remark
+        });
+        return ok ? Ok(new { ok }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("policy-money-to-points/{id:int}/status")]
+    public async Task<IActionResult> SetPolicyMoneyToPointStatus(int id, [FromBody] StatusReq r)
+    {
+        var (ok, msg) = await moneyToPoints.SetStatusAsync(id, (PolicyMoneyToPointStatus)r.Status);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Quy đổi tiền dịch vụ → điểm cho một hạng thẻ theo chính sách đang hiệu lực (công khai).
+    [HttpPost("policy-money-to-point/calc")]
+    public async Task<IActionResult> CalcPolicyMoneyToPoint([FromBody] MoneyToPointCalcReq r)
+    {
+        var o = await moneyToPoints.CalcAsync(r.CardType ?? "", r.Amount, r.At);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, policyCode = o.policyCode, cardType = o.cardType, amount = o.amount, point = o.point, discountRate = o.discountRate, qtyVisit = o.qtyVisit, valueRankCardType = o.valueRankCardType })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
 }
 
 public record DashDto(int Campaigns, int Running, int TotalPlays, int TotalWins, decimal ValueAwarded, List<TopDto> Top);
@@ -1041,3 +1104,6 @@ public class ParamPromotionReq { public string? ProgramCode { get; set; } public
 public class ParamWindowReq { public string? ProgramCode { get; set; } public string? TypeCode { get; set; } public DateTime? Anchor { get; set; } }
 public class RankPolicyReq { public string? Code { get; set; } public string? CardType { get; set; } public int Value { get; set; } public decimal PointUpBegin { get; set; } public decimal PointUpEnd { get; set; } public int QtyVisitUpBegin { get; set; } public int QtyVisitUpEnd { get; set; } public decimal PointKeepBegin { get; set; } public decimal PointKeepEnd { get; set; } public int QtyVisitKeepBegin { get; set; } public int QtyVisitKeepEnd { get; set; } public int QtyMonth { get; set; } = 12; public string? Remark { get; set; } }
 public class RankEvalReq { public string? CardType { get; set; } public decimal Point { get; set; } public int QtyVisit { get; set; } }
+public class PolicyMoneyToPointReq { public string? Code { get; set; } public string Name { get; set; } = ""; public DateTime EffDateStart { get; set; } public DateTime EffDateEnd { get; set; } public string? Remark { get; set; } }
+public class PolicyMoneyToPointDtlReq { public string? CardType { get; set; } public decimal ConvertValue { get; set; } public decimal ConvertPoint { get; set; } public decimal ValueRankCardType { get; set; } public decimal DiscountRate { get; set; } public string? Remark { get; set; } }
+public class MoneyToPointCalcReq { public string? CardType { get; set; } public decimal Amount { get; set; } public DateTime? At { get; set; } }
