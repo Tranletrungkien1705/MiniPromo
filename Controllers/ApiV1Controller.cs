@@ -657,7 +657,7 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
     [HttpPost("card-promotion/use")]
     public async Task<IActionResult> UseCardPromotion([FromBody] CardPromotionUseReq r)
     {
-        var o = await cardPrograms.UseAsync(r.DealNo ?? "", r.DealerCode ?? "", r.CardNo ?? "", r.CardType ?? "", r.Qty);
+        var o = await cardPrograms.UseAsync(r.DealNo ?? "", r.DealerCode ?? "", r.CardNo ?? "", r.CardType ?? "", r.Qty, r.MemberNo, r.At);
         return o.ok ? Ok(new { ok = o.ok, msg = o.msg, qtyRemain = o.qtyRemain, qtyUsed = o.qtyUsed })
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
@@ -1348,7 +1348,7 @@ public class CarRecommendCalcReq { public string? DealerCode { get; set; } publi
 public class CardPromotionProgramReq { public string? Code { get; set; } public string Name { get; set; } = ""; public DateTime EffDateStart { get; set; } public DateTime EffDateEnd { get; set; } public bool FlagAllDL { get; set; } = true; public string? Remark { get; set; } }
 public class CardPromotionProgramDtlReq { public string? CardType { get; set; } public int Qty { get; set; } public string? Unit { get; set; } public string? Remark { get; set; } }
 public class CardPromotionProgramSpecReq { public string? DealerCode { get; set; } }
-public class CardPromotionUseReq { public string? DealNo { get; set; } public string? DealerCode { get; set; } public string? CardNo { get; set; } public string? CardType { get; set; } public int Qty { get; set; } }
+public class CardPromotionUseReq { public string? DealNo { get; set; } public string? DealerCode { get; set; } public string? CardNo { get; set; } public string? MemberNo { get; set; } public string? CardType { get; set; } public int Qty { get; set; } public DateTime? At { get; set; } }
 public class BirthdayPolicyReq { public string? Code { get; set; } public string Name { get; set; } = ""; public DateTime EffDateStart { get; set; } public DateTime EffDateEnd { get; set; } public bool FlagPoint { get; set; } = true; public decimal ParamValue { get; set; } = 1; public string? Remark { get; set; } }
 public class BirthdayPolicyDtlReq { public string? CardType { get; set; } public decimal Point { get; set; } public string? Remark { get; set; } }
 public class BirthdayCheckReq { public string? MemberNo { get; set; } public string? CardType { get; set; } public DateTime? DateOfBirth { get; set; } public DateTime? At { get; set; } }

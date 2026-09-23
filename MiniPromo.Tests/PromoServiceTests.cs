@@ -1494,6 +1494,63 @@ public class CardPromotionProgramServiceTests
             Assert.Equal(7, row.QtyRemain);
         }
     }
+
+    // ---- Luật "1 ngày + 1 chương trình + 1 hội viên + 1 loại thẻ ≤ 1" (port từ Crd_DealUsePromotion_SaveX) ----
+
+    [Fact]
+    public async Task Use_SameMemberSameDay_SecondUse_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActiveProgram(svc, qty: 10);
+            var day = DateTime.Today;
+            var o1 = await svc.UseAsync("DEAL1", "DLCP01", "CARD1", "GOLD", 1, "HV001", day);
+            Assert.True(o1.ok);
+            // Cùng hội viên + cùng loại thẻ + cùng ngày → lần 2 bị chặn (tối đa 1/ngày).
+            var o2 = await svc.UseAsync("DEAL2", "DLCP01", "CARD1", "GOLD", 1, "HV001", day);
+            Assert.False(o2.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Use_SameMemberDifferentDay_Allowed()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActiveProgram(svc, qty: 10);
+            var o1 = await svc.UseAsync("DEAL1", "DLCP01", "CARD1", "GOLD", 1, "HV001", DateTime.Today);
+            Assert.True(o1.ok);
+            // Khác ngày → được phép.
+            var o2 = await svc.UseAsync("DEAL2", "DLCP01", "CARD1", "GOLD", 1, "HV001", DateTime.Today.AddDays(1));
+            Assert.True(o2.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Use_DifferentMemberSameDay_Allowed()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActiveProgram(svc, qty: 10);
+            var day = DateTime.Today;
+            Assert.True((await svc.UseAsync("DEAL1", "DLCP01", "CARD1", "GOLD", 1, "HV001", day)).ok);
+            // Hội viên khác → không bị chặn.
+            Assert.True((await svc.UseAsync("DEAL2", "DLCP01", "CARD2", "GOLD", 1, "HV002", day)).ok);
+        }
+    }
+
+    [Fact]
+    public async Task Use_NoMember_SkipsDailyRule()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActiveProgram(svc, qty: 10);
+            var day = DateTime.Today;
+            // Không truyền hội viên → không áp luật theo ngày, chỉ còn giới hạn tổng Qty.
+            Assert.True((await svc.UseAsync("DEAL1", "DLCP01", "CARD1", "GOLD", 1, null, day)).ok);
+            Assert.True((await svc.UseAsync("DEAL2", "DLCP01", "CARD1", "GOLD", 1, null, day)).ok);
+        }
+    }
 }
 /// <summary>Test chương trình tặng điểm sinh nhật: vòng đời bật/tạm dừng, điều kiện ngày sinh, loại thẻ, 1 lần/năm, quy đổi điểm→tiền, đối soát.</summary>
 public class BirthdayPolicyServiceTests

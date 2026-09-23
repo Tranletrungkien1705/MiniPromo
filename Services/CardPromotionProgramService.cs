@@ -26,7 +26,8 @@ public interface ICardPromotionProgramService
     // Kiểm tra một giao dịch có được dùng ưu đãi không (đại lý thuộc phạm vi, loại thẻ có hạn mức, còn số lượng).
     Task<CardPromotionUseOutcome> CheckUseAsync(string dealerCode, string cardType, int qty);
     // Ghi nhận sử dụng ưu đãi cho một giao dịch (tạo CardPromotionUsage).
-    Task<CardPromotionUseOutcome> UseAsync(string dealNo, string dealerCode, string cardNo, string cardType, int qty);
+    // memberNo: mã hội viên — dùng cho luật "1 ngày + 1 chương trình + 1 hội viên + 1 loại thẻ ≤ 1".
+    Task<CardPromotionUseOutcome> UseAsync(string dealNo, string dealerCode, string cardNo, string cardType, int qty, string? memberNo = null, DateTime? at = null);
     // Đối soát số lượng ưu đãi đã dùng theo chương trình + loại thẻ.
     Task<List<CardPromotionReconRow>> ReconciliationAsync(int? programId);
 }
@@ -139,7 +140,7 @@ public class CardPromotionProgramService(AppDbContext db) : ICardPromotionProgra
     }
 
     // Ghi nhận sử dụng ưu đãi cho một giao dịch — port từ Crd_DealUsePromotion_SaveX.
-    public async Task<CardPromotionUseOutcome> UseAsync(string dealNo, string dealerCode, string cardNo, string cardType, int qty)
+    public async Task<CardPromotionUseOutcome> UseAsync(string dealNo, string dealerCode, string cardNo, string cardType, int qty, string? memberNo = null, DateTime? at = null)
     {
         if (string.IsNullOrWhiteSpace(dealNo)) return new(false, "Cần số giao dịch.", 0, 0);
         var check = await CheckUseAsync(dealerCode, cardType, qty);
@@ -147,11 +148,25 @@ public class CardPromotionProgramService(AppDbContext db) : ICardPromotionProgra
 
         var p = await ActiveProgramAsync();
         var code = cardType.Trim().ToUpper();
+        var member = (memberNo ?? "").Trim();
+        var day = (at ?? DateTime.Today).Date;
+
+        // Luật nguồn: trong 1 ngày + 1 chương trình + 1 hội viên + 1 loại thẻ, tổng ưu đãi ghi nhận không được > 1.
+        if (!string.IsNullOrWhiteSpace(member))
+        {
+            var usedToday = await db.CardPromotionUsages
+                .Where(u => u.CardPromotionProgramId == p!.Id && u.MemberNo == member && u.CardType == code
+                    && u.UsedAt >= day && u.UsedAt < day.AddDays(1))
+                .SumAsync(u => (int?)u.QtyUsed) ?? 0;
+            if (usedToday + qty > 1)
+                return new(false, $"Hội viên {member} đã ghi nhận ưu đãi loại thẻ {code} trong ngày {day:dd/MM/yyyy} (tối đa 1/ngày).", check.qtyRemain, 0);
+        }
+
         db.CardPromotionUsages.Add(new CardPromotionUsage
         {
             DealNo = dealNo.Trim(), DealerCode = (dealerCode ?? "").Trim().ToUpper(),
-            CardNo = (cardNo ?? "").Trim(), CardType = code,
-            CardPromotionProgramId = p!.Id, QtyUsed = qty
+            CardNo = (cardNo ?? "").Trim(), MemberNo = member, CardType = code,
+            CardPromotionProgramId = p!.Id, QtyUsed = qty, UsedAt = at ?? DateTime.UtcNow
         });
         await db.SaveChangesAsync();
         return new(true, "Đã ghi nhận sử dụng ưu đãi.", check.qtyRemain - qty, qty);

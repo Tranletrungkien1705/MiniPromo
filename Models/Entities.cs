@@ -400,6 +400,7 @@ public class CardPromotionProgramSpec : IOrgOwned
 
 // Nhật ký sử dụng ưu đãi của một giao dịch — port từ Crd_DealUsePromotion + Crd_DealUsePromotionDtl.
 // Mỗi lần dùng ghi nhận số lượng ưu đãi đã dùng (QtyUsed) cho một chương trình theo loại thẻ.
+// MemberNo dùng cho luật "1 ngày + 1 chương trình + 1 hội viên + 1 loại thẻ chỉ ghi nhận 1 ưu đãi".
 public class CardPromotionUsage : IOrgOwned
 {
     public int Id { get; set; }
@@ -407,6 +408,7 @@ public class CardPromotionUsage : IOrgOwned
     public string DealNo { get; set; } = "";               // Số giao dịch
     public string DealerCode { get; set; } = "";           // DLCPCode — đại lý thực hiện
     public string CardNo { get; set; } = "";               // Số thẻ
+    public string MemberNo { get; set; } = "";             // Mã hội viên (suy ra từ thẻ) — dùng cho luật theo ngày
     public string CardType { get; set; } = "";             // Loại thẻ
     public int CardPromotionProgramId { get; set; }
     public CardPromotionProgram? CardPromotionProgram { get; set; }

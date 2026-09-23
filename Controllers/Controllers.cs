@@ -470,9 +470,9 @@ public class CardPromotionProgramController(ICardPromotionProgramService svc) : 
 
     // Ghi nhận sử dụng ưu đãi cho một giao dịch (port từ Crd_DealUsePromotion_Save).
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Use(string dealNo, string dealerCode, string cardNo, string cardType, int qty)
+    public async Task<IActionResult> Use(string dealNo, string dealerCode, string cardNo, string? memberNo, string cardType, int qty)
     {
-        var o = await svc.UseAsync(dealNo ?? "", dealerCode ?? "", cardNo ?? "", cardType ?? "", qty);
+        var o = await svc.UseAsync(dealNo ?? "", dealerCode ?? "", cardNo ?? "", cardType ?? "", qty, memberNo);
         TempData[o.ok ? "Success" : "Error"] = o.msg;
         return RedirectToAction(nameof(Index));
     }
