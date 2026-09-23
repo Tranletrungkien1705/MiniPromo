@@ -233,6 +233,15 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
         return o.ok ? Ok(new { ok = o.ok, msg = o.msg, pointVoucher = o.pointVoucher, pointUseLimit = o.pointUseLimit, modelCode = o.modelCode })
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
+
+    // Phát voucher cho một xe theo chương trình đang hiệu lực (công khai) — tạo Voucher gắn chương trình.
+    [HttpPost("voucher-program/issue")]
+    public async Task<IActionResult> IssueVoucher([FromBody] VoucherIssueReq r)
+    {
+        var o = await programs.IssueAsync(r.ModelCode ?? "", r.DeliveryDate, r.RegistrationDate, r.MemberNo);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, voucherId = o.voucherId, voucherCode = o.voucherCode, expireDate = o.expireDate })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
 }
 
 public record DashDto(int Campaigns, int Running, int TotalPlays, int TotalWins, decimal ValueAwarded, List<TopDto> Top);
@@ -249,3 +258,4 @@ public class RedeemReq { public string? Code { get; set; } public decimal? Amoun
 public class VoucherProgramReq { public string? Code { get; set; } public string Name { get; set; } = ""; public DateTime EffDateStart { get; set; } public DateTime EffDateEnd { get; set; } public int ValidityPeriod { get; set; } public int QtyDayLimitFDlvDate { get; set; } public bool FlagAllModel { get; set; } = true; public decimal PointVoucherAllModel { get; set; } public decimal PointUseLimitAllModel { get; set; } public string? Remark { get; set; } }
 public class VoucherProgramDtlReq { public string? ModelCode { get; set; } public decimal PointVoucher { get; set; } public decimal PointUseLimit { get; set; } public string? Remark { get; set; } }
 public class VoucherCalcReq { public string? ModelCode { get; set; } public DateTime? DeliveryDate { get; set; } public DateTime? RegistrationDate { get; set; } }
+public class VoucherIssueReq { public string? ModelCode { get; set; } public DateTime? DeliveryDate { get; set; } public DateTime? RegistrationDate { get; set; } public string? MemberNo { get; set; } }

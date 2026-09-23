@@ -79,6 +79,9 @@ public class Voucher : IOrgOwned
     public string Code { get; set; } = "";               // Mã voucher công khai (tra cứu xuyên tenant)
     public string Name { get; set; } = "";
     public string? MemberNo { get; set; }                 // Mã hội viên sở hữu (tuỳ chọn)
+    public int? VoucherProgramId { get; set; }            // Chương trình đã phát voucher này (nếu có)
+    public VoucherProgram? VoucherProgram { get; set; }
+    public string? ModelCode { get; set; }                // Model xe được phát (nếu phát từ chương trình)
     public decimal PointTotal { get; set; }               // Điểm voucher ban đầu
     public decimal PointRemain { get; set; }              // Điểm voucher còn lại
     public decimal PointLimit { get; set; }               // Điểm tối đa mỗi lần sử dụng

@@ -50,6 +50,7 @@ public class AppDbContext : DbContext
             e.Ignore(x => x.IsExpired);
             e.Ignore(x => x.IsUsable);
             e.Ignore(x => x.Status);
+            e.HasOne(x => x.VoucherProgram).WithMany().HasForeignKey(x => x.VoucherProgramId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<VoucherRedemption>(e =>

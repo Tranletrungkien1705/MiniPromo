@@ -161,4 +161,13 @@ public class VoucherProgramController(IVoucherProgramService svc) : Controller
         var (ok, msg) = await svc.SetStatusAsync(id, status);
         TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
     }
+
+    // Phát voucher cho một xe theo chương trình (tạo Voucher gắn chương trình).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Issue(int id, string modelCode, DateTime? deliveryDate, DateTime? registrationDate, string? memberNo)
+    {
+        var o = await svc.IssueAsync(modelCode ?? "", deliveryDate, registrationDate, memberNo);
+        TempData[o.ok ? "Success" : "Error"] = o.msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
 }

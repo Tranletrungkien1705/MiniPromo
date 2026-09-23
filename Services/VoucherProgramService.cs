@@ -7,6 +7,9 @@ namespace MiniPromo.Services;
 // Kết quả tính giá trị voucher cho một xe cụ thể (port từ Prm_VoucherNewCar_CalcPrm).
 public record VoucherCalcOutcome(bool ok, string msg, decimal pointVoucher, decimal pointUseLimit, string? modelCode);
 
+// Kết quả phát voucher cho một xe (gắn chương trình → tạo Voucher).
+public record VoucherIssueOutcome(bool ok, string msg, int voucherId, string? voucherCode, DateTime expireDate);
+
 public interface IVoucherProgramService
 {
     Task<List<VoucherProgram>> ProgramsAsync();
@@ -16,6 +19,8 @@ public interface IVoucherProgramService
     Task<(bool ok, string msg)> SetStatusAsync(int id, VoucherProgramStatus status);
     Task<VoucherProgram?> ActiveProgramAsync();                       // chương trình đang hiệu lực (duy nhất)
     Task<VoucherCalcOutcome> CalcAsync(string modelCode, DateTime? deliveryDate, DateTime? registrationDate);
+    // Phát voucher cho một xe: kiểm tra điều kiện áp dụng rồi tạo Voucher gắn chương trình.
+    Task<VoucherIssueOutcome> IssueAsync(string modelCode, DateTime? deliveryDate, DateTime? registrationDate, string? memberNo);
 }
 
 /// <summary>
@@ -120,5 +125,37 @@ public class VoucherProgramService(AppDbContext db) : IVoucherProgramService
         }
 
         return new(true, "Đủ điều kiện áp dụng.", point, limit, modelCode);
+    }
+
+    // Phát voucher cho một xe — gắn chương trình đang hiệu lực với Voucher đã có.
+    // Dùng lại CalcAsync để kiểm tra điều kiện (model, ngày giao xe, giới hạn ngày mở thẻ),
+    // rồi tạo Voucher: điểm = giá trị chương trình, hạn dùng = hôm nay + ValidityPeriod.
+    public async Task<VoucherIssueOutcome> IssueAsync(string modelCode, DateTime? deliveryDate, DateTime? registrationDate, string? memberNo)
+    {
+        var calc = await CalcAsync(modelCode, deliveryDate, registrationDate);
+        if (!calc.ok) return new(false, calc.msg, 0, null, default);
+
+        var p = await ActiveProgramAsync();
+        if (p == null) return new(false, "Không có chương trình voucher đang hiệu lực.", 0, null, default);
+
+        var expire = DateTime.Today.AddDays(p.ValidityPeriod > 0 ? p.ValidityPeriod : 30);
+        var voucher = new Voucher
+        {
+            Code = "VC" + Guid.NewGuid().ToString("N")[..8].ToUpper(),
+            Name = $"{p.Name} — {calc.modelCode}",
+            MemberNo = memberNo,
+            VoucherProgramId = p.Id,
+            ModelCode = calc.modelCode,
+            PointTotal = calc.pointVoucher,
+            PointRemain = calc.pointVoucher,
+            PointLimit = calc.pointUseLimit > 0 ? calc.pointUseLimit : calc.pointVoucher,
+            QtyUseLimit = 1,
+            QtyUseRemain = 1,
+            ExpireDate = expire,
+            Active = true
+        };
+        db.Vouchers.Add(voucher);
+        await db.SaveChangesAsync();
+        return new(true, $"Đã phát voucher {voucher.Code} cho model {calc.modelCode}.", voucher.Id, voucher.Code, expire);
     }
 }

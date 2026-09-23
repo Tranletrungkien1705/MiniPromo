@@ -309,4 +309,48 @@ public class VoucherProgramServiceTests
             Assert.Equal(5_000_000, o.pointVoucher);
         }
     }
+
+    [Fact]
+    public async Task Issue_ValidModel_CreatesLinkedVoucher()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var p = await FinishedProgram(svc, allModel: false, point: 5_000_000);
+            var o = await svc.IssueAsync("CITY", DateTime.Today, DateTime.Today.AddDays(5), "HV001");
+            Assert.True(o.ok);
+            Assert.False(string.IsNullOrWhiteSpace(o.voucherCode));
+            var v = await db.Vouchers.FirstAsync(x => x.Id == o.voucherId);
+            Assert.Equal(5_000_000, v.PointTotal);
+            Assert.Equal(5_000_000, v.PointRemain);
+            Assert.Equal(p.Id, v.VoucherProgramId);
+            Assert.Equal("CITY", v.ModelCode);
+            Assert.Equal("HV001", v.MemberNo);
+            Assert.Equal(DateTime.Today.AddDays(30), v.ExpireDate);   // hôm nay + ValidityPeriod
+            Assert.True(v.IsUsable);
+        }
+    }
+
+    [Fact]
+    public async Task Issue_UnknownModel_Rejected_NoVoucher()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await FinishedProgram(svc, allModel: false);
+            var o = await svc.IssueAsync("UNKNOWN", DateTime.Today, DateTime.Today, null);
+            Assert.False(o.ok);
+            Assert.Equal(0, await db.Vouchers.CountAsync());
+        }
+    }
+
+    [Fact]
+    public async Task Issue_RegistrationBeyondDayLimit_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await FinishedProgram(svc, allModel: false);
+            var o = await svc.IssueAsync("CITY", DateTime.Today, DateTime.Today.AddDays(60), null);  // > 30 ngày
+            Assert.False(o.ok);
+            Assert.Equal(0, await db.Vouchers.CountAsync());
+        }
+    }
 }
