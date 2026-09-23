@@ -740,3 +740,51 @@ public class PolicyMoneyToPointController(IPolicyMoneyToPointService svc) : Cont
         return RedirectToAction(nameof(Index));
     }
 }
+
+// Chiết khấu hội viên (port từ Crd_MemberDiscountTransaction).
+public class MemberDiscountController(IMemberDiscountService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? refNo)
+    {
+        ViewBag.RefNo = refNo;
+        return View(await svc.TransactionsAsync(refNo));
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var t = await svc.GetTransactionAsync(id);
+        if (t == null) return NotFound();
+        return View(t);
+    }
+
+    // Tính chiết khấu thử cho một giao dịch (một dòng hàng).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Calc(string refNo, string cardTypeApply, decimal amountForDC, decimal paymentDiscountRate, DateTime? at)
+    {
+        var lines = new[] { new MemberDiscountLine(amountForDC, paymentDiscountRate, true) };
+        var o = await svc.CalcAsync(refNo ?? "", cardTypeApply ?? "", lines, at);
+        TempData[o.ok ? "Success" : "Error"] = o.ok
+            ? $"Giao dịch {o.refNo} · hạng {o.cardTypeApply}: tiền chiết khấu {o.amountForDC.ToString("N0")}đ → chiết khấu {o.discount.ToString("N0")}đ (tỷ lệ hạng thẻ {o.policyDiscountRate}%)."
+            : o.msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Ghi nhận giao dịch chiết khấu (một dòng hàng).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Record(string refNo, string dealerCode, string memberNo, string cardNo,
+        string cardTypeUse, string cardTypeInit, string cardTypeApply, decimal amountForDC, decimal paymentDiscountRate, DateTime? at)
+    {
+        var lines = new[] { new MemberDiscountLine(amountForDC, paymentDiscountRate, true) };
+        var o = await svc.RecordAsync(refNo ?? "", dealerCode ?? "", memberNo ?? "", cardNo ?? "",
+            cardTypeUse ?? "", cardTypeInit ?? "", cardTypeApply ?? "", lines, at);
+        TempData[o.ok ? "Success" : "Error"] = o.msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Đối soát chiết khấu theo hạng thẻ áp dụng.
+    public async Task<IActionResult> Reconciliation(string? cardTypeApply)
+    {
+        ViewBag.CardTypeApply = cardTypeApply;
+        return View(await svc.ReconciliationAsync(cardTypeApply));
+    }
+}

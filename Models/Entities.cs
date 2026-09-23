@@ -686,4 +686,33 @@ public class PolicyMoneyToPointDtl : IOrgOwned
 
     // Tỷ lệ quy đổi: cứ ConvertValue tiền thì được ConvertPoint điểm.
     public decimal Rate => ConvertValue > 0 ? ConvertPoint / ConvertValue : 0;
+}// Loại điểm của giao dịch chiết khấu — theo nguồn DealPointType (Const.Main.cs).
+// DISCOUNTRO: chiết khấu dịch vụ (đối tượng thanh toán × hạng thẻ).
+public enum MemberDiscountPointType { DiscountRO = 0 }
+
+// Nhật ký giao dịch chiết khấu hội viên — port từ Crd_MemberDiscountTransaction của hệ Loyalty.
+// Mỗi giao dịch (RefNo) ghi nhận giá trị chiết khấu (PointChTotal) tính trên số tiền được chiết khấu
+// (AmountForDC) theo tỷ lệ chiết khấu của đối tượng thanh toán (PolicyDiscountRate) và của hạng thẻ
+// áp dụng (CardTypeApply). Chỉ ghi nhận khi giá trị chiết khấu > 0.
+// Nguồn: Crd_MemberDiscountTransaction + logic tính trong Card.Deal.cs
+// (AmountDiscount = AmountForDC × dttt_DiscountRate/100 × ht_DiscountRate/100).
+public class MemberDiscountTransaction : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string RefNo { get; set; } = "";                // Số giao dịch (DealSerRONo)
+    public string DealerCode { get; set; } = "";           // DLCode — đại lý thực hiện
+    public string MemberNo { get; set; } = "";             // Mã hội viên
+    public string CardNo { get; set; } = "";               // Số thẻ
+    public string CardTypeUse { get; set; } = "";          // Hạng thẻ sử dụng (đặc cách)
+    public string CardTypeInit { get; set; } = "";         // Hạng thẻ gốc của hội viên
+    public string CardTypeApply { get; set; } = "";        // Hạng thẻ áp dụng tính chiết khấu
+    public MemberDiscountPointType DealPointType { get; set; } = MemberDiscountPointType.DiscountRO;
+    public string? PolicyCode { get; set; }                // Mã chính sách quy đổi (Mst_PolicyMoneyToPointService)
+    public decimal PolicyDiscountRate { get; set; }        // Tỷ lệ chiết khấu theo hạng thẻ áp dụng (%)
+    public decimal AmountForDC { get; set; }               // Số tiền được chiết khấu
+    public decimal PointChTotal { get; set; }              // Giá trị chiết khấu (tiền)
+    public DateTime CreateDate { get; set; } = DateTime.Today;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public string? Remark { get; set; }
 }

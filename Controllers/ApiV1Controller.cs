@@ -12,7 +12,7 @@ namespace MiniPromo.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Produces("application/json")]
-public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IIssueVoucherService issueVouchers, IParamPromotionService paramPromotions, IRankPolicyService rankPolicies, IPolicyMoneyToPointService moneyToPoints, ICache cache, ITenantContext tenant) : ControllerBase
+public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IIssueVoucherService issueVouchers, IParamPromotionService paramPromotions, IRankPolicyService rankPolicies, IPolicyMoneyToPointService moneyToPoints, IMemberDiscountService memberDiscounts, ICache cache, ITenantContext tenant) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard()
@@ -1054,6 +1054,56 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
         return o.ok ? Ok(new { ok = o.ok, msg = o.msg, policyCode = o.policyCode, cardType = o.cardType, amount = o.amount, point = o.point, discountRate = o.discountRate, qtyVisit = o.qtyVisit, valueRankCardType = o.valueRankCardType })
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
+
+    // ---- Chiết khấu hội viên (port từ Crd_MemberDiscountTransaction) ----
+    [HttpGet("member-discounts")]
+    public async Task<IActionResult> MemberDiscounts([FromQuery] string? refNo)
+        => Ok((await memberDiscounts.TransactionsAsync(refNo)).Select(t => new
+        {
+            t.Id, t.RefNo, t.DealerCode, t.MemberNo, t.CardNo, t.CardTypeUse, t.CardTypeInit, t.CardTypeApply,
+            dealPointType = (int)t.DealPointType, t.PolicyCode, t.PolicyDiscountRate, t.AmountForDC, t.PointChTotal, t.CreateDate
+        }));
+
+    [HttpGet("member-discounts/{id:int}")]
+    public async Task<IActionResult> MemberDiscount(int id)
+    {
+        var t = await memberDiscounts.GetTransactionAsync(id);
+        if (t == null) return NotFound(new { error = "Không tìm thấy giao dịch chiết khấu." });
+        return Ok(new
+        {
+            t.Id, t.RefNo, t.DealerCode, t.MemberNo, t.CardNo, t.CardTypeUse, t.CardTypeInit, t.CardTypeApply,
+            dealPointType = (int)t.DealPointType, t.PolicyCode, t.PolicyDiscountRate, t.AmountForDC, t.PointChTotal, t.CreateDate, t.Remark
+        });
+    }
+
+    // Đối soát chiết khấu theo hạng thẻ áp dụng.
+    [HttpGet("member-discounts/reconciliation")]
+    public async Task<IActionResult> MemberDiscountReconciliation([FromQuery] string? cardTypeApply)
+        => Ok((await memberDiscounts.ReconciliationAsync(cardTypeApply)).Select(r => new
+        {
+            r.CardTypeApply, r.Deals, r.AmountForDC, r.Discount
+        }));
+
+    // Tính chiết khấu hội viên cho một giao dịch theo hạng thẻ áp dụng (công khai).
+    [HttpPost("member-discount/calc")]
+    public async Task<IActionResult> CalcMemberDiscount([FromBody] MemberDiscountCalcReq r)
+    {
+        var lines = r.Lines?.Select(l => new MemberDiscountLine(l.AmountForDC, l.PaymentDiscountRate, l.FlagDiscount));
+        var o = await memberDiscounts.CalcAsync(r.RefNo ?? "", r.CardTypeApply ?? "", lines ?? Enumerable.Empty<MemberDiscountLine>(), r.At);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, refNo = o.refNo, cardTypeApply = o.cardTypeApply, amountForDC = o.amountForDC, discount = o.discount, policyDiscountRate = o.policyDiscountRate })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
+
+    // Ghi nhận giao dịch chiết khấu hội viên (công khai).
+    [HttpPost("member-discount/record")]
+    public async Task<IActionResult> RecordMemberDiscount([FromBody] MemberDiscountRecordReq r)
+    {
+        var lines = r.Lines?.Select(l => new MemberDiscountLine(l.AmountForDC, l.PaymentDiscountRate, l.FlagDiscount));
+        var o = await memberDiscounts.RecordAsync(r.RefNo ?? "", r.DealerCode ?? "", r.MemberNo ?? "", r.CardNo ?? "",
+            r.CardTypeUse ?? "", r.CardTypeInit ?? "", r.CardTypeApply ?? "", lines ?? Enumerable.Empty<MemberDiscountLine>(), r.At);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, id = o.id, amountForDC = o.amountForDC, discount = o.discount })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
 }
 
 public record DashDto(int Campaigns, int Running, int TotalPlays, int TotalWins, decimal ValueAwarded, List<TopDto> Top);
@@ -1107,3 +1157,6 @@ public class RankEvalReq { public string? CardType { get; set; } public decimal 
 public class PolicyMoneyToPointReq { public string? Code { get; set; } public string Name { get; set; } = ""; public DateTime EffDateStart { get; set; } public DateTime EffDateEnd { get; set; } public string? Remark { get; set; } }
 public class PolicyMoneyToPointDtlReq { public string? CardType { get; set; } public decimal ConvertValue { get; set; } public decimal ConvertPoint { get; set; } public decimal ValueRankCardType { get; set; } public decimal DiscountRate { get; set; } public string? Remark { get; set; } }
 public class MoneyToPointCalcReq { public string? CardType { get; set; } public decimal Amount { get; set; } public DateTime? At { get; set; } }
+public class MemberDiscountLineReq { public decimal AmountForDC { get; set; } public decimal PaymentDiscountRate { get; set; } public bool FlagDiscount { get; set; } = true; }
+public class MemberDiscountCalcReq { public string? RefNo { get; set; } public string? CardTypeApply { get; set; } public DateTime? At { get; set; } public List<MemberDiscountLineReq>? Lines { get; set; } }
+public class MemberDiscountRecordReq { public string? RefNo { get; set; } public string? DealerCode { get; set; } public string? MemberNo { get; set; } public string? CardNo { get; set; } public string? CardTypeUse { get; set; } public string? CardTypeInit { get; set; } public string? CardTypeApply { get; set; } public DateTime? At { get; set; } public List<MemberDiscountLineReq>? Lines { get; set; } }

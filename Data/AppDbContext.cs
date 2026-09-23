@@ -42,6 +42,7 @@ public class AppDbContext : DbContext
     public DbSet<RankPolicy> RankPolicies => Set<RankPolicy>();
     public DbSet<PolicyMoneyToPoint> PolicyMoneyToPoints => Set<PolicyMoneyToPoint>();
     public DbSet<PolicyMoneyToPointDtl> PolicyMoneyToPointDtls => Set<PolicyMoneyToPointDtl>();
+    public DbSet<MemberDiscountTransaction> MemberDiscountTransactions => Set<MemberDiscountTransaction>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -268,6 +269,13 @@ public class AppDbContext : DbContext
             e.Property(x => x.DiscountRate).HasPrecision(18, 2);
             e.Ignore(x => x.Rate);
             e.HasOne(x => x.PolicyMoneyToPoint).WithMany(x => x.Details).HasForeignKey(x => x.PolicyMoneyToPointId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<MemberDiscountTransaction>(e =>
+        {
+            e.Property(x => x.PolicyDiscountRate).HasPrecision(18, 2);
+            e.Property(x => x.AmountForDC).HasPrecision(18, 2);
+            e.Property(x => x.PointChTotal).HasPrecision(18, 2);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

@@ -31,6 +31,7 @@ builder.Services.AddScoped<IIssueVoucherService, IssueVoucherService>();
 builder.Services.AddScoped<IParamPromotionService, ParamPromotionService>();
 builder.Services.AddScoped<IRankPolicyService, RankPolicyService>();
 builder.Services.AddScoped<IPolicyMoneyToPointService, PolicyMoneyToPointService>();
+builder.Services.AddScoped<IMemberDiscountService, MemberDiscountService>();
 builder.Services.AddFleetObs();
 builder.Services.AddControllersWithViews();
 
@@ -168,6 +169,23 @@ app.MapPost("/api/policy-money-to-point/calc", async (MoneyToPointCalcDto dto, I
     return Results.Ok(new { ok = r.ok, msg = r.msg, policyCode = r.policyCode, cardType = r.cardType, amount = r.amount, point = r.point, discountRate = r.discountRate, qtyVisit = r.qtyVisit, valueRankCardType = r.valueRankCardType });
 });
 
+// Tính chiết khấu hội viên cho một giao dịch theo hạng thẻ áp dụng (công khai).
+app.MapPost("/api/member-discount/calc", async (MemberDiscountCalcDto dto, IMemberDiscountService svc) =>
+{
+    var lines = (dto.Lines ?? new()).Select(l => new MemberDiscountLine(l.AmountForDC, l.PaymentDiscountRate, l.FlagDiscount));
+    var r = await svc.CalcAsync(dto.RefNo ?? "", dto.CardTypeApply ?? "", lines, dto.At);
+    return Results.Ok(new { ok = r.ok, msg = r.msg, refNo = r.refNo, cardTypeApply = r.cardTypeApply, amountForDC = r.amountForDC, discount = r.discount, policyDiscountRate = r.policyDiscountRate });
+});
+
+// Ghi nhận giao dịch chiết khấu hội viên (công khai).
+app.MapPost("/api/member-discount/record", async (MemberDiscountRecordDto dto, IMemberDiscountService svc) =>
+{
+    var lines = (dto.Lines ?? new()).Select(l => new MemberDiscountLine(l.AmountForDC, l.PaymentDiscountRate, l.FlagDiscount));
+    var r = await svc.RecordAsync(dto.RefNo ?? "", dto.DealerCode ?? "", dto.MemberNo ?? "", dto.CardNo ?? "",
+        dto.CardTypeUse ?? "", dto.CardTypeInit ?? "", dto.CardTypeApply ?? "", lines, dto.At);
+    return Results.Ok(new { ok = r.ok, msg = r.msg, id = r.id, amountForDC = r.amountForDC, discount = r.discount });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -225,6 +243,9 @@ record IssueUseDto(string? VoucherNo, string? OrderNo, DateTime? At);
 record ParamWindowDto(string? ProgramCode, string? TypeCode, DateTime? Anchor);
 record RankEvalDto(string? CardType, decimal Point, int QtyVisit);
 record MoneyToPointCalcDto(string? CardType, decimal Amount, DateTime? At);
+record MemberDiscountLineDto(decimal AmountForDC, decimal PaymentDiscountRate, bool FlagDiscount);
+record MemberDiscountCalcDto(string? RefNo, string? CardTypeApply, DateTime? At, List<MemberDiscountLineDto>? Lines);
+record MemberDiscountRecordDto(string? RefNo, string? DealerCode, string? MemberNo, string? CardNo, string? CardTypeUse, string? CardTypeInit, string? CardTypeApply, DateTime? At, List<MemberDiscountLineDto>? Lines);
 record RegisterOrgDto(string Name);
 record ImportCampaignDto(string? Code, string? Name, string? Description, DateTime? FromDate, DateTime? ToDate, int? Status, int LoseWeight, List<ImportPrizeDto>? Prizes, List<ImportEntryDto>? Entries);
 record ImportPrizeDto(string? Name, string? Tier, decimal Value, int Quantity, int Weight);

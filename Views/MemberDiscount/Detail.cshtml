@@ -1,0 +1,32 @@
+@model MemberDiscountTransaction
+@{ ViewData["Title"] = "Giao dịch chiết khấu " + Model.RefNo; }
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card mb-3"><div class="card-body">
+            <h5 class="fw-bold mb-1">Giao dịch <span class="text-danger">@Model.RefNo</span></h5>
+            <div class="text-muted small">Hội viên <b>@Model.MemberNo</b> · Thẻ <b>@Model.CardNo</b> · Đại lý <b>@Model.DealerCode</b></div>
+            <div class="small mt-1">Ngày ghi nhận @Model.CreateDate.ToString("dd/MM/yyyy")</div>
+        </div></div>
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-2">Chi tiết chiết khấu</h6>
+            <table class="table table-sm align-middle">
+                <tbody>
+                    <tr><td class="text-muted">Hạng thẻ sử dụng</td><td class="fw-semibold">@Model.CardTypeUse</td></tr>
+                    <tr><td class="text-muted">Hạng thẻ gốc</td><td class="fw-semibold">@Model.CardTypeInit</td></tr>
+                    <tr><td class="text-muted">Hạng thẻ áp dụng</td><td class="fw-semibold">@Model.CardTypeApply</td></tr>
+                    <tr><td class="text-muted">Chính sách quy đổi</td><td class="fw-semibold">@Model.PolicyCode</td></tr>
+                    <tr><td class="text-muted">Tỷ lệ chiết khấu hạng thẻ</td><td class="fw-semibold">@Model.PolicyDiscountRate%</td></tr>
+                    <tr><td class="text-muted">Tiền được chiết khấu</td><td class="fw-semibold">@Model.AmountForDC.ToString("N0")đ</td></tr>
+                    <tr><td class="text-muted">Giá trị chiết khấu</td><td class="fw-bold text-danger">@Model.PointChTotal.ToString("N0")đ</td></tr>
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-2">Loại điểm</h6>
+            <span class="badge bg-info">@Model.DealPointType</span>
+            @if (!string.IsNullOrEmpty(Model.Remark)) { <div class="small mt-2">@Model.Remark</div> }
+        </div></div>
+    </div>
+</div>

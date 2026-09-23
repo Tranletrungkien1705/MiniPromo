@@ -2153,3 +2153,137 @@ public class PolicyMoneyToPointServiceTests
         }
     }
 }
+/// <summary>Test chiết khấu hội viên (Crd_MemberDiscountTransaction): công thức chiết khấu, cờ FlagDiscount,
+/// tỷ lệ hạng thẻ theo chính sách, chỉ ghi nhận khi chiết khấu > 0, đối soát theo hạng thẻ.</summary>
+public class MemberDiscountServiceTests
+{
+    private static (AppDbContext db, IMemberDiscountService svc, SqliteConnection conn) NewSvc()
+    {
+        var conn = new SqliteConnection("DataSource=:memory:"); conn.Open();
+        var opt = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conn).Options;
+        var db = new AppDbContext(opt, new TenantContext { OrgId = TenantContext.DefaultOrgId });
+        db.Database.EnsureCreated();
+        return (db, new MemberDiscountService(db), conn);
+    }
+
+    // Chính sách quy đổi đang bật: GOLD chiết khấu 5%, PLATINUM chiết khấu 10%.
+    private static async Task ActivePolicy(AppDbContext db)
+    {
+        var p = new PolicyMoneyToPoint
+        {
+            Code = "PMTP", Name = "Quy đổi", EffDateStart = DateTime.Today.AddDays(-1), EffDateEnd = DateTime.Today.AddDays(10),
+            Status = PolicyMoneyToPointStatus.Active
+        };
+        db.PolicyMoneyToPoints.Add(p); await db.SaveChangesAsync();
+        db.PolicyMoneyToPointDtls.AddRange(
+            new PolicyMoneyToPointDtl { PolicyMoneyToPointId = p.Id, CardType = "GOLD", ConvertValue = 1_000, ConvertPoint = 2, DiscountRate = 5 },
+            new PolicyMoneyToPointDtl { PolicyMoneyToPointId = p.Id, CardType = "PLATINUM", ConvertValue = 1_000, ConvertPoint = 3, DiscountRate = 10 });
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task Calc_AppliesCardTypeAndPaymentRates()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActivePolicy(db);
+            // 2.000.000 × 100% (ĐT thanh toán) × 5% (hạng GOLD) = 100.000
+            var o = await svc.CalcAsync("RO1", "GOLD", new[] { new MemberDiscountLine(2_000_000, 100) }, null);
+            Assert.True(o.ok);
+            Assert.Equal(2_000_000, o.amountForDC);
+            Assert.Equal(100_000, o.discount);
+            Assert.Equal(5, o.policyDiscountRate);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_SkipsLinesWithoutFlagDiscount()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActivePolicy(db);
+            var o = await svc.CalcAsync("RO1", "GOLD", new[]
+            {
+                new MemberDiscountLine(1_000_000, 100, true),
+                new MemberDiscountLine(1_000_000, 100, false)   // không tính
+            }, null);
+            Assert.True(o.ok);
+            Assert.Equal(1_000_000, o.amountForDC);
+            Assert.Equal(50_000, o.discount);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_UnknownCardType_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActivePolicy(db);
+            var o = await svc.CalcAsync("RO1", "BRONZE", new[] { new MemberDiscountLine(1_000_000, 100) }, null);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_NoLines_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActivePolicy(db);
+            var o = await svc.CalcAsync("RO1", "GOLD", Array.Empty<MemberDiscountLine>(), null);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Record_PersistsTransaction()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActivePolicy(db);
+            var o = await svc.RecordAsync("RO1", "DLCP01", "HV001", "CARD001", "GOLD", "GOLD", "GOLD",
+                new[] { new MemberDiscountLine(2_000_000, 100) }, null);
+            Assert.True(o.ok);
+            Assert.Equal(100_000, o.discount);
+            var list = await svc.TransactionsAsync("RO1");
+            Assert.Single(list);
+            Assert.Equal("GOLD", list[0].CardTypeApply);
+            Assert.Equal("PMTP", list[0].PolicyCode);
+        }
+    }
+
+    [Fact]
+    public async Task Record_ZeroDiscount_NotPersisted()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActivePolicy(db);
+            // Tỷ lệ ĐT thanh toán 0% → chiết khấu 0 → không ghi nhận.
+            var o = await svc.RecordAsync("RO1", "DLCP01", "HV001", "CARD001", "GOLD", "GOLD", "GOLD",
+                new[] { new MemberDiscountLine(2_000_000, 0) }, null);
+            Assert.False(o.ok);
+            Assert.Empty(await svc.TransactionsAsync(null));
+        }
+    }
+
+    [Fact]
+    public async Task Reconciliation_GroupsByCardTypeApply()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActivePolicy(db);
+            await svc.RecordAsync("RO1", "DLCP01", "HV001", "C1", "GOLD", "GOLD", "GOLD", new[] { new MemberDiscountLine(2_000_000, 100) }, null);
+            await svc.RecordAsync("RO2", "DLCP01", "HV002", "C2", "GOLD", "GOLD", "GOLD", new[] { new MemberDiscountLine(1_000_000, 100) }, null);
+            await svc.RecordAsync("RO3", "DLCP01", "HV003", "C3", "PLATINUM", "PLATINUM", "PLATINUM", new[] { new MemberDiscountLine(3_000_000, 100) }, null);
+
+            var recon = await svc.ReconciliationAsync(null);
+            Assert.Equal(2, recon.Count);
+            var gold = recon.First(r => r.CardTypeApply == "GOLD");
+            Assert.Equal(2, gold.Deals);
+            Assert.Equal(3_000_000, gold.AmountForDC);
+            Assert.Equal(150_000, gold.Discount);
+            var plat = recon.First(r => r.CardTypeApply == "PLATINUM");
+            Assert.Equal(300_000, plat.Discount);
+        }
+    }
+}

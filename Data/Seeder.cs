@@ -184,13 +184,36 @@ public static class Seeder
                 new PolicyMoneyToPointDtl { PolicyMoneyToPointId = pmtp.Id, CardType = "PLATINUM", ConvertValue = 1_000, ConvertPoint = 3, ValueRankCardType = 2_000_000, DiscountRate = 10 });
             await db.SaveChangesAsync();
         }
+
+        if (!await db.MemberDiscountTransactions.AnyAsync())
+        {
+            // Giao dịch chiết khấu mẫu: hạng GOLD có tỷ lệ chiết khấu 5% (theo chính sách quy đổi ở trên).
+            db.MemberDiscountTransactions.AddRange(
+                new MemberDiscountTransaction
+                {
+                    RefNo = "RO2026001", DealerCode = "DLCP01", MemberNo = "HV001", CardNo = "CARD001",
+                    CardTypeUse = "GOLD", CardTypeInit = "GOLD", CardTypeApply = "GOLD",
+                    DealPointType = MemberDiscountPointType.DiscountRO, PolicyCode = "PMTP2026",
+                    PolicyDiscountRate = 5, AmountForDC = 2_000_000, PointChTotal = 100_000,
+                    CreateDate = DateTime.Today, Remark = "Chiết khấu dịch vụ 5% cho hạng GOLD."
+                },
+                new MemberDiscountTransaction
+                {
+                    RefNo = "RO2026002", DealerCode = "DLCP01", MemberNo = "HV002", CardNo = "CARD002",
+                    CardTypeUse = "PLATINUM", CardTypeInit = "PLATINUM", CardTypeApply = "PLATINUM",
+                    DealPointType = MemberDiscountPointType.DiscountRO, PolicyCode = "PMTP2026",
+                    PolicyDiscountRate = 10, AmountForDC = 3_000_000, PointChTotal = 300_000,
+                    CreateDate = DateTime.Today, Remark = "Chiết khấu dịch vụ 10% cho hạng PLATINUM."
+                });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "PromotionProductScopes", "CarRecommends", "CarRecommendDtls", "CardPromotionPrograms", "CardPromotionProgramDtls", "CardPromotionProgramSpecs", "CardPromotionUsages", "BirthdayPolicies", "BirthdayPolicyDtls", "BirthdayGrants", "IssueVouchers", "IssueVoucherDtls", "IssueVoucherScopes", "IssueVoucherProducts", "IssueVoucherPrices", "RankPolicies", "PolicyMoneyToPoints", "PolicyMoneyToPointDtls" };
+        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "PromotionProductScopes", "CarRecommends", "CarRecommendDtls", "CardPromotionPrograms", "CardPromotionProgramDtls", "CardPromotionProgramSpecs", "CardPromotionUsages", "BirthdayPolicies", "BirthdayPolicyDtls", "BirthdayGrants", "IssueVouchers", "IssueVoucherDtls", "IssueVoucherScopes", "IssueVoucherProducts", "IssueVoucherPrices", "RankPolicies", "PolicyMoneyToPoints", "PolicyMoneyToPointDtls", "MemberDiscountTransactions" };
         var sql = new List<string> {
             "CREATE TABLE IF NOT EXISTS minipromo.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON minipromo.\"Orgs\" (\"ApiKey\")" };

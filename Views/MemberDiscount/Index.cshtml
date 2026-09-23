@@ -1,0 +1,70 @@
+@model List<MemberDiscountTransaction>
+@{ ViewData["Title"] = "Chiết khấu hội viên"; }
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="fw-bold mb-0">Giao dịch chiết khấu hội viên</h5>
+    <a class="btn btn-sm btn-outline-primary" href="/MemberDiscount/Reconciliation"><i class="bi bi-clipboard-check me-1"></i>Đối soát</a>
+</div>
+<div class="row g-3">
+    <div class="col-lg-8"><div class="card"><div class="card-body">
+        <form method="get" class="mb-3 d-flex gap-2">
+            <input name="refNo" value="@ViewBag.RefNo" class="form-control form-control-sm" placeholder="Lọc theo số giao dịch" />
+            <button class="btn btn-sm btn-outline-secondary">Lọc</button>
+        </form>
+        <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>Số giao dịch</th><th>Hội viên</th><th>Hạng áp dụng</th><th class="text-end">Tiền chiết khấu</th><th class="text-end">Chiết khấu</th><th>Ngày</th></tr></thead>
+            <tbody>
+            @foreach (var t in Model)
+            {
+                <tr style="cursor:pointer" onclick="location.href='/MemberDiscount/Detail/@t.Id'">
+                    <td class="fw-semibold small">@t.RefNo</td>
+                    <td class="small">@t.MemberNo</td>
+                    <td><span class="badge bg-secondary">@t.CardTypeApply</span></td>
+                    <td class="text-end">@t.AmountForDC.ToString("N0")</td>
+                    <td class="text-end fw-semibold text-danger">@t.PointChTotal.ToString("N0")</td>
+                    <td class="small text-muted">@t.CreateDate.ToString("dd/MM/yyyy")</td>
+                </tr>
+            }
+            @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có giao dịch chiết khấu.</td></tr> }
+            </tbody>
+        </table>
+    </div></div></div>
+    <div class="col-lg-4">
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Tính chiết khấu thử</h6>
+            <form asp-action="Calc" method="post">@Html.AntiForgeryToken()
+                <div class="mb-2"><input name="refNo" class="form-control form-control-sm" placeholder="Số giao dịch *" required /></div>
+                <div class="mb-2"><input name="cardTypeApply" class="form-control form-control-sm text-uppercase" placeholder="Hạng thẻ áp dụng *" required /></div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><label class="form-label small text-muted">Tiền chiết khấu</label><input name="amountForDC" type="number" step="0.01" class="form-control form-control-sm" /></div>
+                    <div class="col-6"><label class="form-label small text-muted">Tỷ lệ ĐT thanh toán (%)</label><input name="paymentDiscountRate" type="number" step="0.01" value="100" class="form-control form-control-sm" /></div>
+                </div>
+                <div class="mb-3"><input name="at" type="date" class="form-control form-control-sm" /></div>
+                <button class="btn btn-outline-primary w-100"><i class="bi bi-calculator me-1"></i>Tính</button>
+            </form>
+        </div></div>
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3">Ghi nhận giao dịch</h6>
+            <form asp-action="Record" method="post">@Html.AntiForgeryToken()
+                <div class="mb-2"><input name="refNo" class="form-control form-control-sm" placeholder="Số giao dịch *" required /></div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><input name="dealerCode" class="form-control form-control-sm text-uppercase" placeholder="Đại lý" /></div>
+                    <div class="col-6"><input name="memberNo" class="form-control form-control-sm" placeholder="Hội viên" /></div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><input name="cardNo" class="form-control form-control-sm" placeholder="Số thẻ" /></div>
+                    <div class="col-6"><input name="cardTypeApply" class="form-control form-control-sm text-uppercase" placeholder="Hạng áp dụng *" required /></div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><input name="cardTypeUse" class="form-control form-control-sm text-uppercase" placeholder="Hạng sử dụng" /></div>
+                    <div class="col-6"><input name="cardTypeInit" class="form-control form-control-sm text-uppercase" placeholder="Hạng gốc" /></div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><label class="form-label small text-muted">Tiền chiết khấu</label><input name="amountForDC" type="number" step="0.01" class="form-control form-control-sm" /></div>
+                    <div class="col-6"><label class="form-label small text-muted">Tỷ lệ ĐT thanh toán (%)</label><input name="paymentDiscountRate" type="number" step="0.01" value="100" class="form-control form-control-sm" /></div>
+                </div>
+                <div class="mb-3"><input name="at" type="date" class="form-control form-control-sm" /></div>
+                <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Ghi nhận</button>
+            </form>
+        </div></div>
+    </div>
+</div>
