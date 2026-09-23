@@ -12,7 +12,7 @@ namespace MiniPromo.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Produces("application/json")]
-public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICache cache, ITenantContext tenant) : ControllerBase
+public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, ICache cache, ITenantContext tenant) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard()
@@ -267,6 +267,94 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
         return o.ok ? Ok(new { ok = o.ok, msg = o.msg, voucherId = o.voucherId, voucherCode = o.voucherCode, expireDate = o.expireDate })
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
+
+    // ---- Chương trình khuyến mại mua xe mới (port từ Prm_CarNew) ----
+    [HttpGet("car-promotions")]
+    public async Task<IActionResult> CarPromotions()
+        => Ok((await carPromos.PromotionsAsync()).Select(p => new
+        {
+            p.Id, p.Code, p.Name, p.DealerCode, p.EffDateStart, p.EffDateEnd,
+            p.FlagAllModel, p.PointValAllModel,
+            status = (int)p.Status, statusText = Ui.CarPromotion(p.Status).text, statusCss = Ui.CarPromotion(p.Status).css,
+            live = p.IsLiveNow, details = p.Details.Count
+        }));
+
+    [HttpGet("car-promotions/{id:int}")]
+    public async Task<IActionResult> CarPromotion(int id)
+    {
+        var p = await carPromos.GetPromotionAsync(id);
+        if (p == null) return NotFound(new { error = "Không tìm thấy chương trình." });
+        return Ok(new
+        {
+            p.Id, p.Code, p.Name, p.DealerCode, p.EffDateStart, p.EffDateEnd,
+            p.FlagAllModel, p.PointValAllModel, p.Remark,
+            status = (int)p.Status, statusText = Ui.CarPromotion(p.Status).text, live = p.IsLiveNow,
+            details = p.Details.Select(d => new { d.Id, d.ModelCode, d.PointVal, d.Remark })
+        });
+    }
+
+    [HttpPost("car-promotions")]
+    public async Task<IActionResult> CreateCarPromotion([FromBody] CarPromotionReq r)
+    {
+        var (ok, msg, id) = await carPromos.CreatePromotionAsync(new CarPromotion
+        {
+            Code = r.Code ?? "", Name = r.Name, DealerCode = r.DealerCode ?? "",
+            EffDateStart = r.EffDateStart == default ? DateTime.Today : r.EffDateStart,
+            EffDateEnd = r.EffDateEnd == default ? DateTime.Today.AddMonths(1) : r.EffDateEnd,
+            FlagAllModel = r.FlagAllModel, PointValAllModel = r.PointValAllModel, Remark = r.Remark
+        });
+        return ok ? Ok(new { id }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("car-promotions/{id:int}/details")]
+    public async Task<IActionResult> AddCarPromotionDetail(int id, [FromBody] CarPromotionDtlReq r)
+    {
+        var (ok, msg) = await carPromos.AddDetailAsync(new CarPromotionDtl
+        {
+            CarPromotionId = id, ModelCode = r.ModelCode ?? "", PointVal = r.PointVal, Remark = r.Remark
+        });
+        return ok ? Ok(new { ok }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("car-promotions/{id:int}/status")]
+    public async Task<IActionResult> SetCarPromotionStatus(int id, [FromBody] StatusReq r)
+    {
+        var (ok, msg) = await carPromos.SetStatusAsync(id, (CarPromotionStatus)r.Status);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Duyệt chương trình (port từ Prm_CarNew_Appr).
+    [HttpPost("car-promotions/{id:int}/approve")]
+    public async Task<IActionResult> ApproveCarPromotion(int id, [FromBody] RemarkReq? r)
+    {
+        var (ok, msg) = await carPromos.ApproveAsync(id, r?.Remark);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Hoàn tất chương trình (port từ Prm_CarNew_Finish).
+    [HttpPost("car-promotions/{id:int}/finish")]
+    public async Task<IActionResult> FinishCarPromotion(int id, [FromBody] RemarkReq? r)
+    {
+        var (ok, msg) = await carPromos.FinishAsync(id, r?.Remark);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Huỷ chương trình (port từ Prm_CarNew_Cancel).
+    [HttpPost("car-promotions/{id:int}/cancel")]
+    public async Task<IActionResult> CancelCarPromotion(int id, [FromBody] RemarkReq? r)
+    {
+        var (ok, msg) = await carPromos.CancelAsync(id, r?.Remark);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Tính giá trị khuyến mại cho một model theo chương trình đang hiệu lực (công khai).
+    [HttpPost("car-promotion/calc")]
+    public async Task<IActionResult> CalcCarPromotion([FromBody] CarPromoCalcReq r)
+    {
+        var o = await carPromos.CalcAsync(r.DealerCode ?? "", r.ModelCode ?? "");
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, pointVal = o.pointVal, modelCode = o.modelCode })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
 }
 
 public record DashDto(int Campaigns, int Running, int TotalPlays, int TotalWins, decimal ValueAwarded, List<TopDto> Top);
@@ -285,3 +373,6 @@ public class VoucherProgramDtlReq { public string? ModelCode { get; set; } publi
 public class VoucherCalcReq { public string? ModelCode { get; set; } public DateTime? DeliveryDate { get; set; } public DateTime? RegistrationDate { get; set; } }
 public class VoucherIssueReq { public string? ModelCode { get; set; } public DateTime? DeliveryDate { get; set; } public DateTime? RegistrationDate { get; set; } public string? MemberNo { get; set; } }
 public class RemarkReq { public string? Remark { get; set; } }
+public class CarPromotionReq { public string? Code { get; set; } public string Name { get; set; } = ""; public string? DealerCode { get; set; } public DateTime EffDateStart { get; set; } public DateTime EffDateEnd { get; set; } public bool FlagAllModel { get; set; } = true; public decimal PointValAllModel { get; set; } public string? Remark { get; set; } }
+public class CarPromotionDtlReq { public string? ModelCode { get; set; } public decimal PointVal { get; set; } public string? Remark { get; set; } }
+public class CarPromoCalcReq { public string? DealerCode { get; set; } public string? ModelCode { get; set; } }

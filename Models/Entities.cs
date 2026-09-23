@@ -12,6 +12,9 @@ public enum VoucherStatus { Inactive = 0, Active = 1, Expired = 2, UsedUp = 3 }
 // Vòng đời chương trình voucher (mã giảm giá) — theo nguồn Prm_VoucherNewCar.
 public enum VoucherProgramStatus { Pending = 0, Approved = 1, Finished = 2, Cancelled = 3 }
 
+// Vòng đời chương trình khuyến mại mua xe mới — theo nguồn Prm_CarNew (PRMCNStatus).
+public enum CarPromotionStatus { Pending = 0, Approved = 1, Finished = 2, Cancelled = 3 }
+
 public class Org
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -149,5 +152,40 @@ public class VoucherProgramDtl : IOrgOwned
     public string ModelCode { get; set; } = "";            // Model áp dụng
     public decimal PointVoucher { get; set; }               // Giá trị voucher cho model này
     public decimal PointUseLimit { get; set; }              // Hạn mức sử dụng cho model này
+    public string? Remark { get; set; }
+}
+
+// Chương trình khuyến mại mua xe mới — port từ Prm_CarNew.
+// Vòng đời: Chờ duyệt → Đã duyệt → Hoàn tất / Đã huỷ. Mỗi đại lý (DLCPCode) chỉ có 1 chương trình
+// hiệu lực tại một thời điểm; chương trình mới phải bắt đầu từ hôm nay và sau chương trình trước.
+// Giá trị khuyến mại: áp dụng chung cho tất cả model (PointValAllModel) hoặc theo từng model (Details).
+public class CarPromotion : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";                 // PRMCNCode
+    public string Name { get; set; } = "";                 // PRMCNName
+    public string DealerCode { get; set; } = "";           // DLCPCode — đại lý áp dụng
+    public DateTime EffDateStart { get; set; } = DateTime.Today;
+    public DateTime EffDateEnd { get; set; } = DateTime.Today.AddMonths(1);
+    public bool FlagAllModel { get; set; } = true;          // Áp dụng cho tất cả model
+    public decimal PointValAllModel { get; set; }           // Giá trị khuyến mại khi áp dụng tất cả model
+    public CarPromotionStatus Status { get; set; } = CarPromotionStatus.Pending;
+    public string? Remark { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public List<CarPromotionDtl> Details { get; set; } = new();
+
+    public bool IsLiveNow => Status == CarPromotionStatus.Finished && DateTime.Today >= EffDateStart && DateTime.Today <= EffDateEnd;
+}
+
+// Dòng chi tiết theo model — port từ Prm_CarNewDtl + Prm_CarNewSpec.
+public class CarPromotionDtl : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int CarPromotionId { get; set; }
+    public CarPromotion? CarPromotion { get; set; }
+    public string ModelCode { get; set; } = "";            // Model áp dụng
+    public decimal PointVal { get; set; }                   // Giá trị khuyến mại cho model này
     public string? Remark { get; set; }
 }

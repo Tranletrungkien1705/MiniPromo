@@ -51,13 +51,29 @@ public static class Seeder
                 new VoucherProgramDtl { VoucherProgramId = p.Id, ModelCode = "CRV", PointVoucher = 10_000_000, PointUseLimit = 10_000_000 });
             await db.SaveChangesAsync();
         }
+
+        if (!await db.CarPromotions.AnyAsync())
+        {
+            var cp = new CarPromotion
+            {
+                Code = "PRMCN2026", Name = "Khuyến mại mua xe mới 2026", DealerCode = "DLCP01",
+                EffDateStart = DateTime.Today.AddDays(-3), EffDateEnd = DateTime.Today.AddMonths(2),
+                FlagAllModel = false, PointValAllModel = 0,
+                Status = CarPromotionStatus.Finished, Remark = "Áp dụng theo model xe, giá trị khuyến mại trừ vào giá bán."
+            };
+            db.CarPromotions.Add(cp); await db.SaveChangesAsync();
+            db.CarPromotionDtls.AddRange(
+                new CarPromotionDtl { CarPromotionId = cp.Id, ModelCode = "CITY", PointVal = 20_000_000 },
+                new CarPromotionDtl { CarPromotionId = cp.Id, ModelCode = "CRV", PointVal = 40_000_000 });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls" };
+        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls" };
         var sql = new List<string> {
             "CREATE TABLE IF NOT EXISTS minipromo.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON minipromo.\"Orgs\" (\"ApiKey\")" };

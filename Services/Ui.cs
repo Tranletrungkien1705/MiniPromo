@@ -37,4 +37,13 @@ public static class Ui
         VoucherProgramStatus.Cancelled => ("Đã huỷ", "dark"),
         _ => (s.ToString(), "secondary")
     };
+
+    public static (string text, string css) CarPromotion(CarPromotionStatus s) => s switch
+    {
+        CarPromotionStatus.Pending   => ("Chờ duyệt", "secondary"),
+        CarPromotionStatus.Approved  => ("Đã duyệt", "info"),
+        CarPromotionStatus.Finished  => ("Hoàn tất", "success"),
+        CarPromotionStatus.Cancelled => ("Đã huỷ", "dark"),
+        _ => (s.ToString(), "secondary")
+    };
 }

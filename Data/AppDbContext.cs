@@ -16,6 +16,8 @@ public class AppDbContext : DbContext
     public DbSet<VoucherRedemption> VoucherRedemptions => Set<VoucherRedemption>();
     public DbSet<VoucherProgram> VoucherPrograms => Set<VoucherProgram>();
     public DbSet<VoucherProgramDtl> VoucherProgramDtls => Set<VoucherProgramDtl>();
+    public DbSet<CarPromotion> CarPromotions => Set<CarPromotion>();
+    public DbSet<CarPromotionDtl> CarPromotionDtls => Set<CarPromotionDtl>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -73,6 +75,19 @@ public class AppDbContext : DbContext
             e.Property(x => x.PointVoucher).HasPrecision(18, 2);
             e.Property(x => x.PointUseLimit).HasPrecision(18, 2);
             e.HasOne(x => x.VoucherProgram).WithMany(x => x.Details).HasForeignKey(x => x.VoucherProgramId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CarPromotion>(e =>
+        {
+            e.HasIndex(x => x.Code).IsUnique();           // Mã chương trình khuyến mại — duy nhất
+            e.Property(x => x.PointValAllModel).HasPrecision(18, 2);
+            e.Ignore(x => x.IsLiveNow);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CarPromotionDtl>(e =>
+        {
+            e.Property(x => x.PointVal).HasPrecision(18, 2);
+            e.HasOne(x => x.CarPromotion).WithMany(x => x.Details).HasForeignKey(x => x.CarPromotionId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

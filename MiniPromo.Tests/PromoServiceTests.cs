@@ -488,3 +488,217 @@ public class VoucherProgramServiceTests
         }
     }
 }
+
+/// <summary>Test chương trình khuyến mại mua xe mới: vòng đời duyệt/hoàn tất/huỷ, chỉ 1 chương trình hiệu lực/đại lý, tính giá trị theo model.</summary>
+public class CarPromotionServiceTests
+{
+    private static (AppDbContext db, ICarPromotionService svc, SqliteConnection conn) NewSvc()
+    {
+        var conn = new SqliteConnection("DataSource=:memory:"); conn.Open();
+        var opt = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conn).Options;
+        var db = new AppDbContext(opt, new TenantContext { OrgId = TenantContext.DefaultOrgId });
+        db.Database.EnsureCreated();
+        return (db, new CarPromotionService(db), conn);
+    }
+
+    private static async Task<CarPromotion> FinishedPromotion(ICarPromotionService svc, string dealer = "DLCP01", bool allModel = false, decimal point = 20_000_000)
+    {
+        var (_, _, id) = await svc.CreatePromotionAsync(new CarPromotion
+        {
+            Code = "PRMCN" + Guid.NewGuid().ToString("N")[..6].ToUpper(), Name = "CT test", DealerCode = dealer,
+            EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(30),
+            FlagAllModel = allModel, PointValAllModel = allModel ? point : 0
+        });
+        if (!allModel)
+            await svc.AddDetailAsync(new CarPromotionDtl { CarPromotionId = id, ModelCode = "CITY", PointVal = point });
+        await svc.ApproveAsync(id, null);
+        await svc.FinishAsync(id, null);
+        return (await svc.GetPromotionAsync(id))!;
+    }
+
+    [Fact]
+    public async Task Create_StartBeforeToday_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, _) = await svc.CreatePromotionAsync(new CarPromotion { Name = "X", DealerCode = "D1", EffDateStart = DateTime.Today.AddDays(-1), EffDateEnd = DateTime.Today.AddDays(10) });
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task Create_MissingDealer_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, _) = await svc.CreatePromotionAsync(new CarPromotion { Name = "X", EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(10) });
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task Create_StartNotAfterPrevious_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await FinishedPromotion(svc);
+            // Chương trình trước bắt đầu hôm nay → chương trình mới cũng bắt đầu hôm nay là không hợp lệ.
+            var (ok, _, _) = await svc.CreatePromotionAsync(new CarPromotion { Name = "Y", DealerCode = "DLCP01", EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(10) });
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task Create_DifferentDealer_Allowed()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await FinishedPromotion(svc, dealer: "DLCP01");
+            var (ok, _, _) = await svc.CreatePromotionAsync(new CarPromotion { Name = "Y", DealerCode = "DLCP02", EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(10) });
+            Assert.True(ok);   // đại lý khác → không bị chặn
+        }
+    }
+
+    [Fact]
+    public async Task AddDetail_NonPositiveValue_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreatePromotionAsync(new CarPromotion { Name = "Z", DealerCode = "D1", EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(10) });
+            var (ok, _) = await svc.AddDetailAsync(new CarPromotionDtl { CarPromotionId = id, ModelCode = "CITY", PointVal = 0 });
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task Approve_FromPending_Succeeds()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreatePromotionAsync(new CarPromotion { Name = "A", DealerCode = "D1", EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(10) });
+            var (ok, _) = await svc.ApproveAsync(id, null);
+            Assert.True(ok);
+            Assert.Equal(CarPromotionStatus.Approved, (await svc.GetPromotionAsync(id))!.Status);
+        }
+    }
+
+    [Fact]
+    public async Task Finish_FromPending_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreatePromotionAsync(new CarPromotion { Name = "A", DealerCode = "D1", EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(10), FlagAllModel = true, PointValAllModel = 1_000_000 });
+            var (ok, _) = await svc.FinishAsync(id, null);   // chưa duyệt → không hoàn tất được
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task Finish_AllModel_NoValue_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreatePromotionAsync(new CarPromotion { Name = "A", DealerCode = "D1", EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(10), FlagAllModel = true, PointValAllModel = 0 });
+            await svc.ApproveAsync(id, null);
+            var (ok, _) = await svc.FinishAsync(id, null);   // tất cả model nhưng giá trị chung = 0
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task Finish_CutsPreviousActiveEndDate()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            // Chương trình trước được tạo từ hôm qua (chèn trực tiếp để bỏ qua kiểm tra ngày bắt đầu).
+            var prev = new CarPromotion
+            {
+                Code = "PRMCNOLD", Name = "Cũ", DealerCode = "DLCP01",
+                EffDateStart = DateTime.Today.AddDays(-1), EffDateEnd = DateTime.Today.AddDays(30),
+                FlagAllModel = true, PointValAllModel = 3_000_000, Status = CarPromotionStatus.Finished
+            };
+            db.CarPromotions.Add(prev); await db.SaveChangesAsync();
+
+            // Chương trình mới bắt đầu hôm nay (sau chương trình trước) → hoàn tất sẽ cắt ngày kết thúc chương trình trước.
+            var (_, _, id) = await svc.CreatePromotionAsync(new CarPromotion
+            {
+                Name = "Mới", DealerCode = "DLCP01", EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(40),
+                FlagAllModel = true, PointValAllModel = 5_000_000
+            });
+            await svc.ApproveAsync(id, null);
+            var (ok, _) = await svc.FinishAsync(id, null);
+            Assert.True(ok);
+            var prevAfter = await svc.GetPromotionAsync(prev.Id);
+            Assert.Equal(DateTime.Today.AddDays(-1), prevAfter!.EffDateEnd.Date);   // = ngày bắt đầu mới − 1
+        }
+    }
+
+    [Fact]
+    public async Task Cancel_FromApproved_Succeeds()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreatePromotionAsync(new CarPromotion { Name = "A", DealerCode = "D1", EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(10) });
+            await svc.ApproveAsync(id, null);
+            var (ok, _) = await svc.CancelAsync(id, null);
+            Assert.True(ok);
+            Assert.Equal(CarPromotionStatus.Cancelled, (await svc.GetPromotionAsync(id))!.Status);
+        }
+    }
+
+    [Fact]
+    public async Task Cancel_FromFinished_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var p = await FinishedPromotion(svc);
+            var (ok, _) = await svc.CancelAsync(p.Id, null);   // đã hoàn tất → không huỷ được
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_AllModel_ReturnsCommonValue()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await FinishedPromotion(svc, allModel: true, point: 7_000_000);
+            var o = await svc.CalcAsync("DLCP01", "ANY");
+            Assert.True(o.ok);
+            Assert.Equal(7_000_000, o.pointVal);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_PerModel_ReturnsModelValue()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await FinishedPromotion(svc, allModel: false, point: 20_000_000);
+            var o = await svc.CalcAsync("DLCP01", "CITY");
+            Assert.True(o.ok);
+            Assert.Equal(20_000_000, o.pointVal);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_PerModel_UnknownModel_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await FinishedPromotion(svc, allModel: false);
+            var o = await svc.CalcAsync("DLCP01", "UNKNOWN");
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_NoActivePromotion_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var o = await svc.CalcAsync("DLCP01", "CITY");
+            Assert.False(o.ok);
+        }
+    }
+}
