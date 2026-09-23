@@ -340,3 +340,69 @@ public class PromotionProgramController(IPromotionProgramService svc) : Controll
         TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
     }
 }
+
+// Chương trình giới thiệu xe (port từ Prm_CarRecommend).
+public class CarRecommendController(ICarRecommendService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.RecommendsAsync());
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string name, string? code, string dealerCode, DateTime effDateStart, DateTime effDateEnd,
+        bool flagAllModel, decimal pointValAllModel, string? remark)
+    {
+        var (ok, msg, id) = await svc.CreateRecommendAsync(new CarRecommend
+        {
+            Name = name ?? "", Code = (code ?? "").Trim().ToUpper(), DealerCode = (dealerCode ?? "").Trim().ToUpper(),
+            EffDateStart = effDateStart == default ? DateTime.Today : effDateStart,
+            EffDateEnd = effDateEnd == default ? DateTime.Today.AddMonths(1) : effDateEnd,
+            FlagAllModel = flagAllModel, PointValAllModel = pointValAllModel, Remark = remark
+        });
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Detail), new { id }) : RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var p = await svc.GetRecommendAsync(id);
+        if (p == null) return NotFound();
+        return View(p);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddDetail(int id, string modelCode, decimal pointVal, string? remark)
+    {
+        var (ok, msg) = await svc.AddDetailAsync(new CarRecommendDtl { CarRecommendId = id, ModelCode = modelCode ?? "", PointVal = pointVal, Remark = remark });
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetStatus(int id, CarRecommendStatus status)
+    {
+        var (ok, msg) = await svc.SetStatusAsync(id, status);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Duyệt chương trình (port từ Prm_CarRecommend_Appr).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Approve(int id, string? remark)
+    {
+        var (ok, msg) = await svc.ApproveAsync(id, remark);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Hoàn tất chương trình (port từ Prm_CarRecommend_Finish).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Finish(int id, string? remark)
+    {
+        var (ok, msg) = await svc.FinishAsync(id, remark);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Huỷ chương trình (port từ Prm_CarRecommend_Cancel).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Cancel(int id, string? remark)
+    {
+        var (ok, msg) = await svc.CancelAsync(id, remark);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+}

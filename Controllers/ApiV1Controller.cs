@@ -12,7 +12,7 @@ namespace MiniPromo.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Produces("application/json")]
-public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICache cache, ITenantContext tenant) : ControllerBase
+public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICache cache, ITenantContext tenant) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard()
@@ -471,6 +471,94 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
         return o.ok ? Ok(new { ok = o.ok, msg = o.msg, productDiscount = o.productDiscount, orderDiscount = o.orderDiscount, totalDiscount = o.totalDiscount, programCode = o.programCode })
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
+
+    // ---- Chương trình giới thiệu xe (port từ Prm_CarRecommend) ----
+    [HttpGet("car-recommends")]
+    public async Task<IActionResult> CarRecommends()
+        => Ok((await carRecommends.RecommendsAsync()).Select(p => new
+        {
+            p.Id, p.Code, p.Name, p.DealerCode, p.EffDateStart, p.EffDateEnd,
+            p.FlagAllModel, p.PointValAllModel,
+            status = (int)p.Status, statusText = Ui.CarRecommend(p.Status).text, statusCss = Ui.CarRecommend(p.Status).css,
+            live = p.IsLiveNow, details = p.Details.Count
+        }));
+
+    [HttpGet("car-recommends/{id:int}")]
+    public async Task<IActionResult> CarRecommend(int id)
+    {
+        var p = await carRecommends.GetRecommendAsync(id);
+        if (p == null) return NotFound(new { error = "Không tìm thấy chương trình." });
+        return Ok(new
+        {
+            p.Id, p.Code, p.Name, p.DealerCode, p.EffDateStart, p.EffDateEnd,
+            p.FlagAllModel, p.PointValAllModel, p.Remark,
+            status = (int)p.Status, statusText = Ui.CarRecommend(p.Status).text, live = p.IsLiveNow,
+            details = p.Details.Select(d => new { d.Id, d.ModelCode, d.PointVal, d.Remark })
+        });
+    }
+
+    [HttpPost("car-recommends")]
+    public async Task<IActionResult> CreateCarRecommend([FromBody] CarRecommendReq r)
+    {
+        var (ok, msg, id) = await carRecommends.CreateRecommendAsync(new CarRecommend
+        {
+            Code = r.Code ?? "", Name = r.Name, DealerCode = r.DealerCode ?? "",
+            EffDateStart = r.EffDateStart == default ? DateTime.Today : r.EffDateStart,
+            EffDateEnd = r.EffDateEnd == default ? DateTime.Today.AddMonths(1) : r.EffDateEnd,
+            FlagAllModel = r.FlagAllModel, PointValAllModel = r.PointValAllModel, Remark = r.Remark
+        });
+        return ok ? Ok(new { id }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("car-recommends/{id:int}/details")]
+    public async Task<IActionResult> AddCarRecommendDetail(int id, [FromBody] CarRecommendDtlReq r)
+    {
+        var (ok, msg) = await carRecommends.AddDetailAsync(new CarRecommendDtl
+        {
+            CarRecommendId = id, ModelCode = r.ModelCode ?? "", PointVal = r.PointVal, Remark = r.Remark
+        });
+        return ok ? Ok(new { ok }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("car-recommends/{id:int}/status")]
+    public async Task<IActionResult> SetCarRecommendStatus(int id, [FromBody] StatusReq r)
+    {
+        var (ok, msg) = await carRecommends.SetStatusAsync(id, (CarRecommendStatus)r.Status);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Duyệt chương trình (port từ Prm_CarRecommend_Appr).
+    [HttpPost("car-recommends/{id:int}/approve")]
+    public async Task<IActionResult> ApproveCarRecommend(int id, [FromBody] RemarkReq? r)
+    {
+        var (ok, msg) = await carRecommends.ApproveAsync(id, r?.Remark);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Hoàn tất chương trình (port từ Prm_CarRecommend_Finish).
+    [HttpPost("car-recommends/{id:int}/finish")]
+    public async Task<IActionResult> FinishCarRecommend(int id, [FromBody] RemarkReq? r)
+    {
+        var (ok, msg) = await carRecommends.FinishAsync(id, r?.Remark);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Huỷ chương trình (port từ Prm_CarRecommend_Cancel).
+    [HttpPost("car-recommends/{id:int}/cancel")]
+    public async Task<IActionResult> CancelCarRecommend(int id, [FromBody] RemarkReq? r)
+    {
+        var (ok, msg) = await carRecommends.CancelAsync(id, r?.Remark);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Tính giá trị thưởng giới thiệu cho một model theo chương trình đang hiệu lực (công khai).
+    [HttpPost("car-recommend/calc")]
+    public async Task<IActionResult> CalcCarRecommend([FromBody] CarRecommendCalcReq r)
+    {
+        var o = await carRecommends.CalcAsync(r.DealerCode ?? "", r.ModelCode ?? "");
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, pointVal = o.pointVal, modelCode = o.modelCode })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
 }
 
 public record DashDto(int Campaigns, int Running, int TotalPlays, int TotalWins, decimal ValueAwarded, List<TopDto> Top);
@@ -497,3 +585,6 @@ public class PromotionScopeReq { public int ScopeType { get; set; } public strin
 public class PromotionPrmReq { public int Idx { get; set; } public int Qty { get; set; } public decimal UPDc { get; set; } public decimal UPRateDc { get; set; } public decimal UPDcMax { get; set; } public decimal ValOrdDc { get; set; } public decimal ValOrdRateDc { get; set; } public decimal ValOrdDcMax { get; set; } public string? Remark { get; set; } }
 public class PromotionMainReq { public int Idx { get; set; } public int Qty { get; set; } public decimal Amount { get; set; } public decimal TotalValOrd { get; set; } }
 public class PromotionCalcReq { public decimal OrderAmount { get; set; } public int Qty { get; set; } public DateTime? At { get; set; } }
+public class CarRecommendReq { public string? Code { get; set; } public string Name { get; set; } = ""; public string? DealerCode { get; set; } public DateTime EffDateStart { get; set; } public DateTime EffDateEnd { get; set; } public bool FlagAllModel { get; set; } = true; public decimal PointValAllModel { get; set; } public string? Remark { get; set; } }
+public class CarRecommendDtlReq { public string? ModelCode { get; set; } public decimal PointVal { get; set; } public string? Remark { get; set; } }
+public class CarRecommendCalcReq { public string? DealerCode { get; set; } public string? ModelCode { get; set; } }

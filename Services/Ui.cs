@@ -56,6 +56,15 @@ public static class Ui
         _ => (s.ToString(), "secondary")
     };
 
+    public static (string text, string css) CarRecommend(CarRecommendStatus s) => s switch
+    {
+        CarRecommendStatus.Pending   => ("Chờ duyệt", "secondary"),
+        CarRecommendStatus.Approved  => ("Đã duyệt", "info"),
+        CarRecommendStatus.Finished  => ("Hoàn tất", "success"),
+        CarRecommendStatus.Cancelled => ("Đã huỷ", "dark"),
+        _ => (s.ToString(), "secondary")
+    };
+
     public static string MainTypeText(PromotionMainType t) => t switch
     {
         PromotionMainType.Order           => "Đơn hàng",

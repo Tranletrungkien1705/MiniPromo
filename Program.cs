@@ -24,6 +24,7 @@ builder.Services.AddScoped<IVoucherService, VoucherService>();
 builder.Services.AddScoped<IVoucherProgramService, VoucherProgramService>();
 builder.Services.AddScoped<ICarPromotionService, CarPromotionService>();
 builder.Services.AddScoped<IPromotionProgramService, PromotionProgramService>();
+builder.Services.AddScoped<ICarRecommendService, CarRecommendService>();
 builder.Services.AddFleetObs();
 builder.Services.AddControllersWithViews();
 
@@ -91,6 +92,13 @@ app.MapPost("/api/promotion/calc", async (PromotionCalcDto dto, IPromotionProgra
     return Results.Ok(new { ok = r.ok, msg = r.msg, productDiscount = r.productDiscount, orderDiscount = r.orderDiscount, totalDiscount = r.totalDiscount, programCode = r.programCode });
 });
 
+// Tính giá trị thưởng giới thiệu xe cho một model theo chương trình đang hiệu lực (công khai).
+app.MapPost("/api/car-recommend/calc", async (CarRecommendCalcDto dto, ICarRecommendService svc) =>
+{
+    var r = await svc.CalcAsync(dto.DealerCode ?? "", dto.ModelCode ?? "");
+    return Results.Ok(new { ok = r.ok, msg = r.msg, pointVal = r.pointVal, modelCode = r.modelCode });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -140,6 +148,7 @@ record RedeemDto(string? Code, decimal? Amount, string? MemberNo);
 record VoucherCalcDto(string? ModelCode, DateTime? DeliveryDate, DateTime? RegistrationDate);
 record CarPromoCalcDto(string? DealerCode, string? ModelCode);
 record PromotionCalcDto(decimal OrderAmount, int Qty, DateTime? At);
+record CarRecommendCalcDto(string? DealerCode, string? ModelCode);
 record RegisterOrgDto(string Name);
 record ImportCampaignDto(string? Code, string? Name, string? Description, DateTime? FromDate, DateTime? ToDate, int? Status, int LoseWeight, List<ImportPrizeDto>? Prizes, List<ImportEntryDto>? Entries);
 record ImportPrizeDto(string? Name, string? Tier, decimal Value, int Quantity, int Weight);

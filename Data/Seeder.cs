@@ -88,13 +88,29 @@ public static class Seeder
             db.PromotionMains.Add(new PromotionMain { PromotionProgramId = pp.Id, Idx = 1, TotalValOrd = 500_000 });
             await db.SaveChangesAsync();
         }
+
+        if (!await db.CarRecommends.AnyAsync())
+        {
+            var cr = new CarRecommend
+            {
+                Code = "PRMCR2026", Name = "Giới thiệu xe 2026", DealerCode = "DLCP01",
+                EffDateStart = DateTime.Today.AddDays(-3), EffDateEnd = DateTime.Today.AddMonths(2),
+                FlagAllModel = false, PointValAllModel = 0,
+                Status = CarRecommendStatus.Finished, Remark = "Thưởng cho người giới thiệu khách mua xe, áp dụng theo model."
+            };
+            db.CarRecommends.Add(cr); await db.SaveChangesAsync();
+            db.CarRecommendDtls.AddRange(
+                new CarRecommendDtl { CarRecommendId = cr.Id, ModelCode = "CITY", PointVal = 3_000_000 },
+                new CarRecommendDtl { CarRecommendId = cr.Id, ModelCode = "CRV", PointVal = 5_000_000 });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains" };
+        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "CarRecommends", "CarRecommendDtls" };
         var sql = new List<string> {
             "CREATE TABLE IF NOT EXISTS minipromo.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON minipromo.\"Orgs\" (\"ApiKey\")" };

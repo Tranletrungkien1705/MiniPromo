@@ -22,6 +22,8 @@ public class AppDbContext : DbContext
     public DbSet<PromotionScope> PromotionScopes => Set<PromotionScope>();
     public DbSet<PromotionPrm> PromotionPrms => Set<PromotionPrm>();
     public DbSet<PromotionMain> PromotionMains => Set<PromotionMain>();
+    public DbSet<CarRecommend> CarRecommends => Set<CarRecommend>();
+    public DbSet<CarRecommendDtl> CarRecommendDtls => Set<CarRecommendDtl>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -122,6 +124,19 @@ public class AppDbContext : DbContext
             e.Property(x => x.Amount).HasPrecision(18, 2);
             e.Property(x => x.TotalValOrd).HasPrecision(18, 2);
             e.HasOne(x => x.PromotionProgram).WithMany(x => x.Mains).HasForeignKey(x => x.PromotionProgramId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CarRecommend>(e =>
+        {
+            e.HasIndex(x => x.Code).IsUnique();           // Mã chương trình giới thiệu — duy nhất
+            e.Property(x => x.PointValAllModel).HasPrecision(18, 2);
+            e.Ignore(x => x.IsLiveNow);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CarRecommendDtl>(e =>
+        {
+            e.Property(x => x.PointVal).HasPrecision(18, 2);
+            e.HasOne(x => x.CarRecommend).WithMany(x => x.Details).HasForeignKey(x => x.CarRecommendId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }
