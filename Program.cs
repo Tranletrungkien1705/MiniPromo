@@ -27,6 +27,7 @@ builder.Services.AddScoped<IPromotionProgramService, PromotionProgramService>();
 builder.Services.AddScoped<ICarRecommendService, CarRecommendService>();
 builder.Services.AddScoped<ICardPromotionProgramService, CardPromotionProgramService>();
 builder.Services.AddScoped<IBirthdayPolicyService, BirthdayPolicyService>();
+builder.Services.AddScoped<IIssueVoucherService, IssueVoucherService>();
 builder.Services.AddFleetObs();
 builder.Services.AddControllersWithViews();
 
@@ -129,6 +130,20 @@ app.MapPost("/api/birthday-policy/grant", async (BirthdayGrantDto dto, IBirthday
     return Results.Ok(new { ok = r.ok, msg = r.msg, point = r.point, amount = r.amount, cardType = r.cardType });
 });
 
+// Kiểm tra một voucher của đợt phát hành có được dùng hay không (công khai).
+app.MapPost("/api/issue-voucher/check", async (IssueUseDto dto, IIssueVoucherService svc) =>
+{
+    var r = await svc.CheckUseAsync(dto.VoucherNo ?? "", dto.At);
+    return Results.Ok(new { ok = r.ok, msg = r.msg, voucherNo = r.voucherNo, favorType = r.favorType });
+});
+
+// Ghi nhận sử dụng voucher của đợt phát hành (công khai).
+app.MapPost("/api/issue-voucher/use", async (IssueUseDto dto, IIssueVoucherService svc) =>
+{
+    var r = await svc.UseAsync(dto.VoucherNo ?? "", dto.OrderNo, dto.At);
+    return Results.Ok(new { ok = r.ok, msg = r.msg, voucherNo = r.voucherNo, favorType = r.favorType });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -182,6 +197,7 @@ record CarRecommendCalcDto(string? DealerCode, string? ModelCode);
 record CardPromotionUseDto(string? DealNo, string? DealerCode, string? CardNo, string? CardType, int Qty);
 record BirthdayCheckDto(string? MemberNo, string? CardType, DateTime? DateOfBirth, DateTime? At);
 record BirthdayGrantDto(string? MemberNo, string? CardNo, string? CardType, string? DealerCode, DateTime? DateOfBirth, DateTime? At);
+record IssueUseDto(string? VoucherNo, string? OrderNo, DateTime? At);
 record RegisterOrgDto(string Name);
 record ImportCampaignDto(string? Code, string? Name, string? Description, DateTime? FromDate, DateTime? ToDate, int? Status, int LoseWeight, List<ImportPrizeDto>? Prizes, List<ImportEntryDto>? Entries);
 record ImportPrizeDto(string? Name, string? Tier, decimal Value, int Quantity, int Weight);

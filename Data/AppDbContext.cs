@@ -32,6 +32,11 @@ public class AppDbContext : DbContext
     public DbSet<BirthdayPolicy> BirthdayPolicies => Set<BirthdayPolicy>();
     public DbSet<BirthdayPolicyDtl> BirthdayPolicyDtls => Set<BirthdayPolicyDtl>();
     public DbSet<BirthdayGrant> BirthdayGrants => Set<BirthdayGrant>();
+    public DbSet<IssueVoucher> IssueVouchers => Set<IssueVoucher>();
+    public DbSet<IssueVoucherDtl> IssueVoucherDtls => Set<IssueVoucherDtl>();
+    public DbSet<IssueVoucherScope> IssueVoucherScopes => Set<IssueVoucherScope>();
+    public DbSet<IssueVoucherProduct> IssueVoucherProducts => Set<IssueVoucherProduct>();
+    public DbSet<IssueVoucherPrice> IssueVoucherPrices => Set<IssueVoucherPrice>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -191,6 +196,36 @@ public class AppDbContext : DbContext
             e.Property(x => x.Point).HasPrecision(18, 2);
             e.Property(x => x.Amount).HasPrecision(18, 2);
             e.HasOne(x => x.BirthdayPolicy).WithMany().HasForeignKey(x => x.BirthdayPolicyId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<IssueVoucher>(e =>
+        {
+            e.HasIndex(x => x.Code).IsUnique();           // Mã đợt phát hành — duy nhất
+            e.Ignore(x => x.IsLiveNow);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<IssueVoucherDtl>(e =>
+        {
+            e.HasIndex(x => x.VoucherNo).IsUnique();      // Mã voucher — duy nhất
+            e.HasOne(x => x.IssueVoucher).WithMany(x => x.Details).HasForeignKey(x => x.IssueVoucherId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<IssueVoucherScope>(e =>
+        {
+            e.HasOne(x => x.IssueVoucher).WithMany(x => x.Scopes).HasForeignKey(x => x.IssueVoucherId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<IssueVoucherProduct>(e =>
+        {
+            e.HasOne(x => x.IssueVoucher).WithMany(x => x.Products).HasForeignKey(x => x.IssueVoucherId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<IssueVoucherPrice>(e =>
+        {
+            e.Property(x => x.UPDc).HasPrecision(18, 2);
+            e.Property(x => x.UPRateDc).HasPrecision(18, 2);
+            e.Property(x => x.UPDcMax).HasPrecision(18, 2);
+            e.HasOne(x => x.IssueVoucher).WithMany(x => x.Prices).HasForeignKey(x => x.IssueVoucherId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

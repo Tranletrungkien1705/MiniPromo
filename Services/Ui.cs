@@ -125,4 +125,52 @@ public static class Ui
         PromotionProductScopeKind.Prm  => "Hình thức",
         _ => k.ToString()
     };
+
+    public static string FavorTypeText(IssueFavorType t) => t switch
+    {
+        IssueFavorType.Discount => "Giảm giá",
+        IssueFavorType.Freeship => "Miễn phí giao hàng",
+        _ => t.ToString()
+    };
+
+    public static string IssueFormText(IssueFormType t) => t switch
+    {
+        IssueFormType.Sell => "Bán",
+        IssueFormType.Give => "Tặng",
+        _ => t.ToString()
+    };
+
+    public static (string text, string css) IssueVoucherStatusBadge(IssueVoucherStatus s) => s switch
+    {
+        IssueVoucherStatus.Pending   => ("Chưa phát", "secondary"),
+        IssueVoucherStatus.Issued    => ("Đã phát", "info"),
+        IssueVoucherStatus.Evicted   => ("Thu hồi", "warning"),
+        IssueVoucherStatus.Cancelled => ("Đã huỷ", "dark"),
+        IssueVoucherStatus.Used      => ("Đã dùng", "success"),
+        _ => (s.ToString(), "secondary")
+    };
+
+    public static string IssueVoucherStatusText(IssueVoucherStatus s) => IssueVoucherStatusBadge(s).text;
+
+    public static string IssueScopeTypeText(IssueScopeType t) => t switch
+    {
+        IssueScopeType.Branch        => "Chi nhánh",
+        IssueScopeType.OrderCreate   => "Người tạo đơn",
+        IssueScopeType.CustomerGroup => "Nhóm khách hàng",
+        _ => t.ToString()
+    };
+
+    public static string IssueRefTypeText(IssueRefType t) => t switch
+    {
+        IssueRefType.Product      => "Mã hàng",
+        IssueRefType.ProductGroup => "Nhóm hàng",
+        _ => t.ToString()
+    };
+
+    public static string IssuePriceTypeText(IssuePriceType t) => t switch
+    {
+        IssuePriceType.Issue     => "Hình thức phát hành",
+        IssuePriceType.Condition => "Điều kiện áp dụng",
+        _ => t.ToString()
+    };
 }

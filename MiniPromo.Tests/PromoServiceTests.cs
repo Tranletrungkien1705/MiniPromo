@@ -1681,3 +1681,199 @@ public class BirthdayPolicyServiceTests
         }
     }
 }
+/// <summary>Test đợt phát hành voucher: chỉ phát khi đợt hiệu lực, chặn vượt số lượng, chặn trùng mã,
+/// voucher hết hạn không dùng được, vòng đời Chưa phát → Đã phát → Đã dùng/Thu hồi/Huỷ, đối soát theo trạng thái.</summary>
+public class IssueVoucherServiceTests
+{
+    private static (AppDbContext db, IIssueVoucherService svc, SqliteConnection conn) NewSvc()
+    {
+        var conn = new SqliteConnection("DataSource=:memory:"); conn.Open();
+        var opt = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conn).Options;
+        var db = new AppDbContext(opt, new TenantContext { OrgId = TenantContext.DefaultOrgId });
+        db.Database.EnsureCreated();
+        return (db, new IssueVoucherService(db), conn);
+    }
+
+    // Tạo đợt đang bật, trong hiệu lực, có 1 dòng giá trị ưu đãi.
+    private static async Task<IssueVoucher> ActiveBatch(AppDbContext db, IIssueVoucherService svc, int qty = 2, int qtyDateUse = 30)
+    {
+        var (_, _, id) = await svc.CreateBatchAsync(new IssueVoucher
+        {
+            Code = "ISSUE1", Name = "Đợt 1", QtyVoucher = qty, QtyDateUse = qtyDateUse,
+            EffDateStart = DateTime.Today.AddDays(-1), EffDateEnd = DateTime.Today.AddDays(10)
+        });
+        await svc.AddPriceAsync(new IssueVoucherPrice { IssueVoucherId = id, IssueType = IssuePriceType.Issue, IssueTypeDtl = "Giảm giá", UPRateDc = 10 });
+        await svc.SetActiveAsync(id, true);
+        return (await svc.GetBatchAsync(id))!;
+    }
+
+    [Fact]
+    public async Task Create_RequiresNameAndQty()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            Assert.False((await svc.CreateBatchAsync(new IssueVoucher { Name = "", QtyVoucher = 1, QtyDateUse = 1 })).ok);
+            Assert.False((await svc.CreateBatchAsync(new IssueVoucher { Name = "X", QtyVoucher = 0, QtyDateUse = 1 })).ok);
+            Assert.False((await svc.CreateBatchAsync(new IssueVoucher { Name = "X", QtyVoucher = 1, QtyDateUse = 0 })).ok);
+        }
+    }
+
+    [Fact]
+    public async Task Create_DuplicateCode_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.CreateBatchAsync(new IssueVoucher { Code = "A", Name = "A", QtyVoucher = 1, QtyDateUse = 1 });
+            var o = await svc.CreateBatchAsync(new IssueVoucher { Code = "A", Name = "B", QtyVoucher = 1, QtyDateUse = 1 });
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task SetActive_RequiresPrice()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateBatchAsync(new IssueVoucher { Code = "A", Name = "A", QtyVoucher = 1, QtyDateUse = 1 });
+            Assert.False((await svc.SetActiveAsync(id, true)).ok);   // chưa có giá trị ưu đãi
+            await svc.AddPriceAsync(new IssueVoucherPrice { IssueVoucherId = id, IssueTypeDtl = "Giảm giá", UPDc = 10_000 });
+            Assert.True((await svc.SetActiveAsync(id, true)).ok);
+        }
+    }
+
+    [Fact]
+    public async Task Issue_WhenActive_CreatesVoucherWithExpiry()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var b = await ActiveBatch(db, svc, qtyDateUse: 30);
+            var o = await svc.IssueAsync(b.Id, "VC001", "Nguyễn A", DateTime.Today);
+            Assert.True(o.ok);
+            Assert.Equal("VC001", o.voucherNo);
+            Assert.Equal(DateTime.Today.AddDays(30), o.expDate);
+            Assert.Equal(1, await db.IssueVoucherDtls.CountAsync());
+        }
+    }
+
+    [Fact]
+    public async Task Issue_WhenInactive_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateBatchAsync(new IssueVoucher { Code = "A", Name = "A", QtyVoucher = 5, QtyDateUse = 30, EffDateStart = DateTime.Today.AddDays(-1), EffDateEnd = DateTime.Today.AddDays(10) });
+            await svc.AddPriceAsync(new IssueVoucherPrice { IssueVoucherId = id, IssueTypeDtl = "Giảm giá", UPDc = 10_000 });
+            var o = await svc.IssueAsync(id, "VC001", null, DateTime.Today);   // chưa bật
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Issue_ExceedQty_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var b = await ActiveBatch(db, svc, qty: 2);
+            Assert.True((await svc.IssueAsync(b.Id, "VC001", null, DateTime.Today)).ok);
+            Assert.True((await svc.IssueAsync(b.Id, "VC002", null, DateTime.Today)).ok);
+            var o = await svc.IssueAsync(b.Id, "VC003", null, DateTime.Today);
+            Assert.False(o.ok);   // vượt số lượng
+        }
+    }
+
+    [Fact]
+    public async Task Issue_DuplicateVoucherNo_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var b = await ActiveBatch(db, svc, qty: 5);
+            Assert.True((await svc.IssueAsync(b.Id, "VC001", null, DateTime.Today)).ok);
+            var o = await svc.IssueAsync(b.Id, "VC001", null, DateTime.Today);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task CheckUse_Issued_Valid()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var b = await ActiveBatch(db, svc);
+            await svc.IssueAsync(b.Id, "VC001", null, DateTime.Today);
+            var o = await svc.CheckUseAsync("VC001", DateTime.Today);
+            Assert.True(o.ok);
+            Assert.Equal("Discount", o.favorType);
+        }
+    }
+
+    [Fact]
+    public async Task CheckUse_Expired_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var b = await ActiveBatch(db, svc, qtyDateUse: 5);
+            await svc.IssueAsync(b.Id, "VC001", null, DateTime.Today);
+            var o = await svc.CheckUseAsync("VC001", DateTime.Today.AddDays(6));
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Use_ThenCheck_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var b = await ActiveBatch(db, svc);
+            await svc.IssueAsync(b.Id, "VC001", null, DateTime.Today);
+            Assert.True((await svc.UseAsync("VC001", "DH01", DateTime.Today)).ok);
+            Assert.False((await svc.CheckUseAsync("VC001", DateTime.Today)).ok);   // đã dùng
+            var dtl = await db.IssueVoucherDtls.FirstAsync();
+            Assert.Equal(IssueVoucherStatus.Used, dtl.Status);
+            Assert.Equal("DH01", dtl.OrderNo);
+        }
+    }
+
+    [Fact]
+    public async Task Evict_OnlyIssued()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var b = await ActiveBatch(db, svc);
+            var o = await svc.IssueAsync(b.Id, "VC001", null, DateTime.Today);
+            Assert.True((await svc.EvictAsync(o.voucherId)).ok);
+            Assert.False((await svc.EvictAsync(o.voucherId)).ok);   // đã thu hồi
+            Assert.False((await svc.CheckUseAsync("VC001", DateTime.Today)).ok);
+        }
+    }
+
+    [Fact]
+    public async Task Cancel_UsedVoucher_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var b = await ActiveBatch(db, svc);
+            var o = await svc.IssueAsync(b.Id, "VC001", null, DateTime.Today);
+            await svc.UseAsync("VC001", null, DateTime.Today);
+            Assert.False((await svc.CancelVoucherAsync(o.voucherId)).ok);
+        }
+    }
+
+    [Fact]
+    public async Task Reconciliation_CountsByStatus()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var b = await ActiveBatch(db, svc, qty: 5);
+            var v1 = await svc.IssueAsync(b.Id, "VC001", null, DateTime.Today);
+            await svc.IssueAsync(b.Id, "VC002", null, DateTime.Today);
+            await svc.IssueAsync(b.Id, "VC003", null, DateTime.Today);
+            await svc.UseAsync("VC001", null, DateTime.Today);
+            await svc.EvictAsync(v1.voucherId == 0 ? 0 : (await db.IssueVoucherDtls.FirstAsync(d => d.VoucherNo == "VC002")).Id);
+            var rows = await svc.ReconciliationAsync(b.Id);
+            var row = Assert.Single(rows);
+            Assert.Equal(5, row.QtyVoucher);
+            Assert.Equal(1, row.Issued);    // VC003
+            Assert.Equal(1, row.Used);      // VC001
+            Assert.Equal(1, row.Evicted);   // VC002
+        }
+    }
+}

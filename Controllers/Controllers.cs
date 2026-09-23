@@ -545,3 +545,97 @@ public class BirthdayPolicyController(IBirthdayPolicyService svc) : Controller
         return View(await svc.ReconciliationAsync(policyId));
     }
 }
+
+// Đợt phát hành voucher (port từ Mst_IssueVoucher).
+public class IssueVoucherController(IIssueVoucherService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.BatchesAsync());
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string name, string? code, DateTime effDateStart, DateTime effDateEnd,
+        int qtyVoucher, int qtyDateUse, IssueFavorType favorType, IssueFormType issueForm, string? remark)
+    {
+        var (ok, msg, id) = await svc.CreateBatchAsync(new IssueVoucher
+        {
+            Name = name ?? "", Code = (code ?? "").Trim().ToUpper(),
+            EffDateStart = effDateStart == default ? DateTime.Today : effDateStart,
+            EffDateEnd = effDateEnd == default ? DateTime.Today.AddMonths(1) : effDateEnd,
+            QtyVoucher = qtyVoucher, QtyDateUse = qtyDateUse,
+            FavorType = favorType, IssueForm = issueForm, Remark = remark
+        });
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Detail), new { id }) : RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var v = await svc.GetBatchAsync(id);
+        if (v == null) return NotFound();
+        return View(v);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddScope(int id, IssueScopeType scopeType, string value)
+    {
+        var (ok, msg) = await svc.AddScopeAsync(new IssueVoucherScope { IssueVoucherId = id, ScopeType = scopeType, Value = value ?? "" });
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddProduct(int id, IssueRefType refType, string refCode, string? refName)
+    {
+        var (ok, msg) = await svc.AddProductAsync(new IssueVoucherProduct { IssueVoucherId = id, RefType = refType, RefCode = refCode ?? "", RefName = refName });
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddPrice(int id, IssuePriceType issueType, string issueTypeDtl, decimal upDc, decimal upRateDc, decimal upDcMax, string? remark)
+    {
+        var (ok, msg) = await svc.AddPriceAsync(new IssueVoucherPrice
+        {
+            IssueVoucherId = id, IssueType = issueType, IssueTypeDtl = issueTypeDtl ?? "",
+            UPDc = upDc, UPRateDc = upRateDc, UPDcMax = upDcMax, Remark = remark
+        });
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetActive(int id, bool active)
+    {
+        var (ok, msg) = await svc.SetActiveAsync(id, active);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Phát hành một voucher trong đợt (port từ Mst_IssueVoucherDtl).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Issue(int id, string voucherNo, string? receiver, DateTime? at)
+    {
+        var o = await svc.IssueAsync(id, voucherNo ?? "", receiver, at);
+        TempData[o.ok ? "Success" : "Error"] = o.msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Thu hồi voucher đã phát.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Evict(int id, int voucherId)
+    {
+        var (ok, msg) = await svc.EvictAsync(voucherId);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Huỷ voucher đã phát.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CancelVoucher(int id, int voucherId)
+    {
+        var (ok, msg) = await svc.CancelVoucherAsync(voucherId);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Đối soát đợt phát hành theo trạng thái voucher.
+    public async Task<IActionResult> Reconciliation(int? batchId)
+    {
+        ViewBag.BatchId = batchId;
+        ViewBag.Batches = await svc.BatchesAsync();
+        return View(await svc.ReconciliationAsync(batchId));
+    }
+}

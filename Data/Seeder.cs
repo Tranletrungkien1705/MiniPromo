@@ -140,13 +140,31 @@ public static class Seeder
                 new BirthdayPolicyDtl { BirthdayPolicyId = bp.Id, CardType = "PLATINUM", Point = 1_000 });
             await db.SaveChangesAsync();
         }
+
+        if (!await db.IssueVouchers.AnyAsync())
+        {
+            var iv = new IssueVoucher
+            {
+                Code = "ISSUE2026", Name = "Đợt phát hành voucher Tết 2026",
+                EffDateStart = DateTime.Today.AddDays(-3), EffDateEnd = DateTime.Today.AddMonths(2),
+                QtyVoucher = 100, QtyDateUse = 30,
+                FavorType = IssueFavorType.Discount, IssueForm = IssueFormType.Give,
+                FlagConditionUsePrd = false, FlagScopeBranch = false, FlagActive = true,
+                Remark = "Phát voucher giảm giá 10% (tối đa 100.000đ) cho khách hàng tại chi nhánh HN01."
+            };
+            db.IssueVouchers.Add(iv); await db.SaveChangesAsync();
+            db.IssueVoucherPrices.Add(new IssueVoucherPrice { IssueVoucherId = iv.Id, IssueType = IssuePriceType.Issue, IssueTypeDtl = "Giảm giá", UPRateDc = 10, UPDcMax = 100_000 });
+            db.IssueVoucherScopes.Add(new IssueVoucherScope { IssueVoucherId = iv.Id, ScopeType = IssueScopeType.Branch, Value = "HN01" });
+            db.IssueVoucherProducts.Add(new IssueVoucherProduct { IssueVoucherId = iv.Id, RefType = IssueRefType.Product, RefCode = "SP001", RefName = "Sản phẩm A" });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "PromotionProductScopes", "CarRecommends", "CarRecommendDtls", "CardPromotionPrograms", "CardPromotionProgramDtls", "CardPromotionProgramSpecs", "CardPromotionUsages", "BirthdayPolicies", "BirthdayPolicyDtls", "BirthdayGrants" };
+        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "PromotionProductScopes", "CarRecommends", "CarRecommendDtls", "CardPromotionPrograms", "CardPromotionProgramDtls", "CardPromotionProgramSpecs", "CardPromotionUsages", "BirthdayPolicies", "BirthdayPolicyDtls", "BirthdayGrants", "IssueVouchers", "IssueVoucherDtls", "IssueVoucherScopes", "IssueVoucherProducts", "IssueVoucherPrices" };
         var sql = new List<string> {
             "CREATE TABLE IF NOT EXISTS minipromo.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON minipromo.\"Orgs\" (\"ApiKey\")" };

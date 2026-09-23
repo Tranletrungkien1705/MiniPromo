@@ -1,0 +1,60 @@
+@model List<IssueReconRow>
+@{
+    ViewData["Title"] = "Đối soát đợt phát hành voucher";
+    var batches = ViewBag.Batches as List<IssueVoucher> ?? new();
+    int? batchId = ViewBag.BatchId as int?;
+    var totalQty = Model.Sum(r => r.QtyVoucher);
+    var totalIssued = Model.Sum(r => r.Issued);
+    var totalUsed = Model.Sum(r => r.Used);
+}
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="fw-bold mb-0">Đối soát đợt phát hành voucher</h5>
+    <a href="/IssueVoucher" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Về đợt phát hành</a>
+</div>
+
+<div class="card mb-3"><div class="card-body">
+    <form method="get" class="row g-2 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label small text-muted mb-0">Lọc theo đợt phát hành</label>
+            <select name="batchId" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">— Tất cả đợt —</option>
+                @foreach (var b in batches)
+                {
+                    <option value="@b.Id" selected="@(batchId == b.Id)">@b.Code — @b.Name</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2"><button class="btn btn-sm btn-primary w-100">Lọc</button></div>
+    </form>
+</div></div>
+
+<div class="row g-2 text-center mb-3">
+    <div class="col"><div class="card"><div class="card-body py-2"><div class="text-muted small">Số lượng cấp</div><div class="fw-bold fs-5">@totalQty</div></div></div></div>
+    <div class="col"><div class="card"><div class="card-body py-2"><div class="text-muted small">Đã phát</div><div class="fw-bold fs-5">@totalIssued</div></div></div></div>
+    <div class="col"><div class="card"><div class="card-body py-2"><div class="text-muted small">Đã dùng</div><div class="fw-bold fs-5" style="color:#db2777">@totalUsed</div></div></div></div>
+</div>
+
+<div class="card"><div class="card-body">
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr>
+            <th>Đợt phát hành</th>
+            <th class="text-center">Số lượng</th><th class="text-center">Đã phát</th><th class="text-center">Đã dùng</th>
+            <th class="text-center">Chưa phát</th><th class="text-center">Thu hồi</th><th class="text-center">Đã huỷ</th>
+        </tr></thead>
+        <tbody>
+        @foreach (var r in Model)
+        {
+            <tr>
+                <td class="small"><span class="fw-semibold">@r.IssueCode</span><div class="text-muted">@r.IssueName</div></td>
+                <td class="text-center">@r.QtyVoucher</td>
+                <td class="text-center">@r.Issued</td>
+                <td class="text-center fw-bold" style="color:#db2777">@r.Used</td>
+                <td class="text-center">@r.Pending</td>
+                <td class="text-center">@r.Evicted</td>
+                <td class="text-center">@r.Cancelled</td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có dữ liệu.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

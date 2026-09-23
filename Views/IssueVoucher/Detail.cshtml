@@ -1,0 +1,143 @@
+@model IssueVoucher
+@{ ViewData["Title"] = Model.Name; }
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card mb-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h5 class="fw-bold mb-1">@Model.Name <span class="badge bg-@(Model.FlagActive ? "success" : "secondary") ms-1">@(Model.FlagActive ? "Đang bật" : "Tạm dừng")</span></h5>
+                    <div class="text-muted small">Mã <b>@Model.Code</b> · @Model.EffDateStart.ToString("dd/MM/yyyy") – @Model.EffDateEnd.ToString("dd/MM/yyyy")</div>
+                    @if (!string.IsNullOrEmpty(Model.Remark)) { <div class="small mt-1">@Model.Remark</div> }
+                </div>
+                <div class="text-end">
+                    @if (Model.FlagActive) { <form asp-action="SetActive" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="active" value="false" /><button class="btn btn-sm btn-outline-dark">Tạm dừng</button></form> }
+                    else { <form asp-action="SetActive" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="active" value="true" /><button class="btn btn-sm btn-success">Bật</button></form> }
+                </div>
+            </div>
+            <div class="row g-2 text-center mt-2">
+                <div class="col"><div class="text-muted small">Số lượng</div><div class="fw-bold">@Model.Details.Count/@Model.QtyVoucher</div></div>
+                <div class="col"><div class="text-muted small">Thời hạn</div><div class="fw-bold">@Model.QtyDateUse ngày</div></div>
+                <div class="col"><div class="text-muted small">Kiểu ưu đãi</div><div class="fw-bold">@Ui.FavorTypeText(Model.FavorType)</div></div>
+                <div class="col"><div class="text-muted small">Hình thức</div><div class="fw-bold">@Ui.IssueFormText(Model.IssueForm)</div></div>
+            </div>
+        </div></div>
+
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-2">Voucher đã phát</h6>
+            <table class="table table-sm align-middle">
+                <thead><tr><th>Mã voucher</th><th>Người nhận</th><th>Phát</th><th>Hết hạn</th><th>Trạng thái</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var d in Model.Details)
+                {
+                    var (t, css) = Ui.IssueVoucherStatusBadge(d.Status);
+                    <tr>
+                        <td class="fw-semibold small">@d.VoucherNo</td>
+                        <td class="small">@d.Receiver</td>
+                        <td class="small text-muted">@(d.IssueDate?.ToString("dd/MM/yy"))</td>
+                        <td class="small text-muted">@(d.ExpDate?.ToString("dd/MM/yy"))</td>
+                        <td><span class="badge bg-@css">@t</span></td>
+                        <td class="text-end">
+                            @if (d.Status == IssueVoucherStatus.Issued)
+                            {
+                                <form asp-action="Evict" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="voucherId" value="@d.Id" /><button class="btn btn-sm btn-outline-warning py-0">Thu hồi</button></form>
+                                <form asp-action="CancelVoucher" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="voucherId" value="@d.Id" /><button class="btn btn-sm btn-outline-dark py-0">Huỷ</button></form>
+                            }
+                        </td>
+                    </tr>
+                }
+                @if (Model.Details.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-3">Chưa phát voucher nào.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-2">Giá trị ưu đãi</h6>
+            <table class="table table-sm align-middle">
+                <thead><tr><th>Loại</th><th>Diễn giải</th><th class="text-end">Tiền</th><th class="text-end">%</th><th class="text-end">Tối đa</th></tr></thead>
+                <tbody>
+                @foreach (var p in Model.Prices)
+                {
+                    <tr><td class="small">@Ui.IssuePriceTypeText(p.IssueType)</td><td class="small">@p.IssueTypeDtl</td><td class="text-end">@p.UPDc.ToString("N0")</td><td class="text-end">@p.UPRateDc.ToString("N0")</td><td class="text-end">@p.UPDcMax.ToString("N0")</td></tr>
+                }
+                @if (Model.Prices.Count == 0) { <tr><td colspan="5" class="text-center text-muted py-3">Chưa có giá trị ưu đãi.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-2">Phạm vi &amp; điều kiện hàng hoá</h6>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="text-muted small mb-1">Phạm vi áp dụng</div>
+                    <table class="table table-sm align-middle mb-0">
+                        <tbody>
+                        @foreach (var s in Model.Scopes)
+                        {
+                            <tr><td class="small">@Ui.IssueScopeTypeText(s.ScopeType)</td><td class="small fw-semibold">@s.Value</td></tr>
+                        }
+                        @if (Model.Scopes.Count == 0) { <tr><td class="text-muted small">Tất cả (không giới hạn)</td></tr> }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <div class="text-muted small mb-1">Điều kiện hàng hoá</div>
+                    <table class="table table-sm align-middle mb-0">
+                        <tbody>
+                        @foreach (var p in Model.Products)
+                        {
+                            <tr><td class="small">@Ui.IssueRefTypeText(p.RefType)</td><td class="small fw-semibold">@p.RefCode</td><td class="small text-muted">@p.RefName</td></tr>
+                        }
+                        @if (Model.Products.Count == 0) { <tr><td class="text-muted small">@(Model.FlagConditionUsePrd ? "Chọn bất kỳ hàng hoá" : "Chưa chọn hàng hoá")</td></tr> }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div></div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Phát hành voucher</h6>
+            <form asp-action="Issue" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                <div class="mb-2"><input name="voucherNo" class="form-control form-control-sm text-uppercase" placeholder="Mã voucher *" required /></div>
+                <div class="mb-2"><input name="receiver" class="form-control form-control-sm" placeholder="Người nhận" /></div>
+                <div class="mb-3"><label class="form-label small text-muted">Ngày phát (mặc định hôm nay)</label><input name="at" type="date" class="form-control form-control-sm" /></div>
+                <button class="btn btn-primary w-100"><i class="bi bi-ticket-perforated me-1"></i>Phát hành</button>
+            </form>
+        </div></div>
+
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Thêm giá trị ưu đãi</h6>
+            <form asp-action="AddPrice" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                <div class="mb-2"><select name="issueType" class="form-select form-select-sm"><option value="0">Hình thức phát hành</option><option value="1">Điều kiện áp dụng</option></select></div>
+                <div class="mb-2"><input name="issueTypeDtl" class="form-control form-control-sm" placeholder="Diễn giải (Giảm giá / Giá bán...) *" required /></div>
+                <div class="row g-2 mb-2">
+                    <div class="col-4"><input name="upDc" type="number" step="0.01" min="0" value="0" class="form-control form-control-sm" placeholder="Tiền" /></div>
+                    <div class="col-4"><input name="upRateDc" type="number" step="0.01" min="0" value="0" class="form-control form-control-sm" placeholder="%" /></div>
+                    <div class="col-4"><input name="upDcMax" type="number" step="0.01" min="0" value="0" class="form-control form-control-sm" placeholder="Tối đa" /></div>
+                </div>
+                <div class="mb-3"><input name="remark" class="form-control form-control-sm" placeholder="Ghi chú" /></div>
+                <button class="btn btn-outline-primary w-100"><i class="bi bi-plus-lg me-1"></i>Thêm giá trị</button>
+            </form>
+        </div></div>
+
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Thêm phạm vi áp dụng</h6>
+            <form asp-action="AddScope" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                <div class="mb-2"><select name="scopeType" class="form-select form-select-sm"><option value="0">Chi nhánh</option><option value="1">Người tạo đơn</option><option value="2">Nhóm khách hàng</option></select></div>
+                <div class="mb-3"><input name="value" class="form-control form-control-sm text-uppercase" placeholder="Mã chi nhánh / UserCode / Nhóm KH *" required /></div>
+                <button class="btn btn-outline-primary w-100"><i class="bi bi-plus-lg me-1"></i>Thêm phạm vi</button>
+            </form>
+        </div></div>
+
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3">Thêm điều kiện hàng hoá</h6>
+            <form asp-action="AddProduct" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                <div class="mb-2"><select name="refType" class="form-select form-select-sm"><option value="0">Mã hàng</option><option value="1">Nhóm hàng</option></select></div>
+                <div class="mb-2"><input name="refCode" class="form-control form-control-sm text-uppercase" placeholder="Mã hàng / nhóm hàng *" required /></div>
+                <div class="mb-3"><input name="refName" class="form-control form-control-sm" placeholder="Tên hàng / nhóm hàng" /></div>
+                <button class="btn btn-outline-primary w-100"><i class="bi bi-plus-lg me-1"></i>Thêm hàng hoá</button>
+            </form>
+        </div></div>
+    </div>
+</div>

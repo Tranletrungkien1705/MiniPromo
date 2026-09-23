@@ -12,7 +12,7 @@ namespace MiniPromo.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Produces("application/json")]
-public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, ICache cache, ITenantContext tenant) : ControllerBase
+public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IIssueVoucherService issueVouchers, ICache cache, ITenantContext tenant) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard()
@@ -740,6 +740,134 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
         return o.ok ? Ok(new { ok = o.ok, msg = o.msg, point = o.point, amount = o.amount, cardType = o.cardType })
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
+
+    // ---- Đợt phát hành voucher (port từ Mst_IssueVoucher) ----
+    [HttpGet("issue-vouchers")]
+    public async Task<IActionResult> IssueVouchers()
+        => Ok((await issueVouchers.BatchesAsync()).Select(v => new
+        {
+            v.Id, v.Code, v.Name, v.EffDateStart, v.EffDateEnd, v.QtyVoucher, v.QtyDateUse,
+            favorType = (int)v.FavorType, favorTypeText = Ui.FavorTypeText(v.FavorType),
+            issueForm = (int)v.IssueForm, issueFormText = Ui.IssueFormText(v.IssueForm),
+            v.FlagActive, activeText = v.FlagActive ? "Đang bật" : "Tạm dừng",
+            live = v.IsLiveNow, details = v.Details.Count, scopes = v.Scopes.Count, products = v.Products.Count, prices = v.Prices.Count
+        }));
+
+    [HttpGet("issue-vouchers/{id:int}")]
+    public async Task<IActionResult> IssueVoucher(int id)
+    {
+        var v = await issueVouchers.GetBatchAsync(id);
+        if (v == null) return NotFound(new { error = "Không tìm thấy đợt phát hành." });
+        return Ok(new
+        {
+            v.Id, v.Code, v.Name, v.EffDateStart, v.EffDateEnd, v.QtyVoucher, v.QtyDateUse,
+            favorType = (int)v.FavorType, favorTypeText = Ui.FavorTypeText(v.FavorType),
+            issueForm = (int)v.IssueForm, issueFormText = Ui.IssueFormText(v.IssueForm),
+            v.FlagConditionUsePrd, v.FlagScopeBranch, v.FlagScopeOrderCreate, v.FlagScopeCusType,
+            v.FlagActive, live = v.IsLiveNow, v.Remark,
+            details = v.Details.Select(d => new { d.Id, d.VoucherNo, d.Receiver, status = (int)d.Status, statusText = Ui.IssueVoucherStatusText(d.Status), d.IssueDate, d.ExpDate, d.UseDate, d.OrderNo }),
+            scopes = v.Scopes.Select(s => new { s.Id, scopeType = (int)s.ScopeType, scopeTypeText = Ui.IssueScopeTypeText(s.ScopeType), s.Value }),
+            products = v.Products.Select(p => new { p.Id, refType = (int)p.RefType, refTypeText = Ui.IssueRefTypeText(p.RefType), p.RefCode, p.RefName }),
+            prices = v.Prices.Select(p => new { p.Id, issueType = (int)p.IssueType, issueTypeText = Ui.IssuePriceTypeText(p.IssueType), p.IssueTypeDtl, p.UPDc, p.UPRateDc, p.UPDcMax, p.Remark })
+        });
+    }
+
+    [HttpPost("issue-vouchers")]
+    public async Task<IActionResult> CreateIssueVoucher([FromBody] IssueVoucherReq r)
+    {
+        var (ok, msg, id) = await issueVouchers.CreateBatchAsync(new IssueVoucher
+        {
+            Code = r.Code ?? "", Name = r.Name,
+            EffDateStart = r.EffDateStart == default ? DateTime.Today : r.EffDateStart,
+            EffDateEnd = r.EffDateEnd == default ? DateTime.Today.AddMonths(1) : r.EffDateEnd,
+            QtyVoucher = r.QtyVoucher, QtyDateUse = r.QtyDateUse,
+            FavorType = (IssueFavorType)r.FavorType, IssueForm = (IssueFormType)r.IssueForm, Remark = r.Remark
+        });
+        return ok ? Ok(new { id }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("issue-vouchers/{id:int}/scopes")]
+    public async Task<IActionResult> AddIssueVoucherScope(int id, [FromBody] IssueVoucherScopeReq r)
+    {
+        var (ok, msg) = await issueVouchers.AddScopeAsync(new IssueVoucherScope { IssueVoucherId = id, ScopeType = (IssueScopeType)r.ScopeType, Value = r.Value ?? "" });
+        return ok ? Ok(new { ok }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("issue-vouchers/{id:int}/products")]
+    public async Task<IActionResult> AddIssueVoucherProduct(int id, [FromBody] IssueVoucherProductReq r)
+    {
+        var (ok, msg) = await issueVouchers.AddProductAsync(new IssueVoucherProduct { IssueVoucherId = id, RefType = (IssueRefType)r.RefType, RefCode = r.RefCode ?? "", RefName = r.RefName });
+        return ok ? Ok(new { ok }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("issue-vouchers/{id:int}/prices")]
+    public async Task<IActionResult> AddIssueVoucherPrice(int id, [FromBody] IssueVoucherPriceReq r)
+    {
+        var (ok, msg) = await issueVouchers.AddPriceAsync(new IssueVoucherPrice
+        {
+            IssueVoucherId = id, IssueType = (IssuePriceType)r.IssueType, IssueTypeDtl = r.IssueTypeDtl ?? "",
+            UPDc = r.UPDc, UPRateDc = r.UPRateDc, UPDcMax = r.UPDcMax, Remark = r.Remark
+        });
+        return ok ? Ok(new { ok }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("issue-vouchers/{id:int}/active")]
+    public async Task<IActionResult> SetIssueVoucherActive(int id, [FromBody] ActiveReq r)
+    {
+        var (ok, msg) = await issueVouchers.SetActiveAsync(id, r.Active);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Phát hành một voucher trong đợt (port từ Mst_IssueVoucherDtl).
+    [HttpPost("issue-vouchers/{id:int}/issue")]
+    public async Task<IActionResult> IssueVoucherDtl(int id, [FromBody] IssueVoucherIssueReq r)
+    {
+        var o = await issueVouchers.IssueAsync(id, r.VoucherNo ?? "", r.Receiver, r.At);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, voucherId = o.voucherId, voucherNo = o.voucherNo, expDate = o.expDate })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
+
+    // Thu hồi voucher đã phát.
+    [HttpPost("issue-vouchers/{id:int}/vouchers/{voucherId:int}/evict")]
+    public async Task<IActionResult> EvictIssueVoucher(int id, int voucherId)
+    {
+        var (ok, msg) = await issueVouchers.EvictAsync(voucherId);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Huỷ voucher đã phát.
+    [HttpPost("issue-vouchers/{id:int}/vouchers/{voucherId:int}/cancel")]
+    public async Task<IActionResult> CancelIssueVoucher(int id, int voucherId)
+    {
+        var (ok, msg) = await issueVouchers.CancelVoucherAsync(voucherId);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Đối soát đợt phát hành theo trạng thái voucher.
+    [HttpGet("issue-vouchers/reconciliation")]
+    public async Task<IActionResult> IssueVoucherReconciliation([FromQuery] int? batchId)
+        => Ok((await issueVouchers.ReconciliationAsync(batchId)).Select(r => new
+        {
+            r.IssueVoucherId, r.IssueCode, r.IssueName, r.QtyVoucher, r.Issued, r.Used, r.Pending, r.Evicted, r.Cancelled
+        }));
+
+    // Kiểm tra một voucher của đợt phát hành có được dùng hay không (công khai).
+    [HttpPost("issue-voucher/check")]
+    public async Task<IActionResult> CheckIssueVoucher([FromBody] IssueUseReq r)
+    {
+        var o = await issueVouchers.CheckUseAsync(r.VoucherNo ?? "", r.At);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, voucherNo = o.voucherNo, favorType = o.favorType })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
+
+    // Ghi nhận sử dụng voucher của đợt phát hành (công khai).
+    [HttpPost("issue-voucher/use")]
+    public async Task<IActionResult> UseIssueVoucher([FromBody] IssueUseReq r)
+    {
+        var o = await issueVouchers.UseAsync(r.VoucherNo ?? "", r.OrderNo, r.At);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, voucherNo = o.voucherNo, favorType = o.favorType })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
 }
 
 public record DashDto(int Campaigns, int Running, int TotalPlays, int TotalWins, decimal ValueAwarded, List<TopDto> Top);
@@ -779,3 +907,9 @@ public class BirthdayPolicyReq { public string? Code { get; set; } public string
 public class BirthdayPolicyDtlReq { public string? CardType { get; set; } public decimal Point { get; set; } public string? Remark { get; set; } }
 public class BirthdayCheckReq { public string? MemberNo { get; set; } public string? CardType { get; set; } public DateTime? DateOfBirth { get; set; } public DateTime? At { get; set; } }
 public class BirthdayGrantReq { public string? MemberNo { get; set; } public string? CardNo { get; set; } public string? CardType { get; set; } public string? DealerCode { get; set; } public DateTime? DateOfBirth { get; set; } public DateTime? At { get; set; } }
+public class IssueVoucherReq { public string? Code { get; set; } public string Name { get; set; } = ""; public DateTime EffDateStart { get; set; } public DateTime EffDateEnd { get; set; } public int QtyVoucher { get; set; } public int QtyDateUse { get; set; } public int FavorType { get; set; } public int IssueForm { get; set; } public string? Remark { get; set; } }
+public class IssueVoucherScopeReq { public int ScopeType { get; set; } public string? Value { get; set; } }
+public class IssueVoucherProductReq { public int RefType { get; set; } public string? RefCode { get; set; } public string? RefName { get; set; } }
+public class IssueVoucherPriceReq { public int IssueType { get; set; } public string? IssueTypeDtl { get; set; } public decimal UPDc { get; set; } public decimal UPRateDc { get; set; } public decimal UPDcMax { get; set; } public string? Remark { get; set; } }
+public class IssueVoucherIssueReq { public string? VoucherNo { get; set; } public string? Receiver { get; set; } public DateTime? At { get; set; } }
+public class IssueUseReq { public string? VoucherNo { get; set; } public string? OrderNo { get; set; } public DateTime? At { get; set; } }

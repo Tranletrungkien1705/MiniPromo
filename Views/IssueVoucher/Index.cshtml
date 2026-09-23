@@ -1,0 +1,51 @@
+@model List<IssueVoucher>
+@{ ViewData["Title"] = "Đợt phát hành voucher"; }
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="fw-bold mb-0">Đợt phát hành voucher</h5>
+    <a href="/IssueVoucher/Reconciliation" class="btn btn-sm btn-outline-primary"><i class="bi bi-clipboard-check me-1"></i>Đối soát</a>
+</div>
+<div class="row g-3">
+    <div class="col-lg-8"><div class="card"><div class="card-body">
+        <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>Mã</th><th>Tên</th><th>Hiệu lực</th><th class="text-center">SL</th><th>Ưu đãi</th><th>Trạng thái</th></tr></thead>
+            <tbody>
+            @foreach (var v in Model)
+            {
+                <tr style="cursor:pointer" onclick="location.href='/IssueVoucher/Detail/@v.Id'">
+                    <td class="fw-semibold small">@v.Code</td><td>@v.Name</td>
+                    <td class="small text-muted">@v.EffDateStart.ToString("dd/MM") – @v.EffDateEnd.ToString("dd/MM/yy")</td>
+                    <td class="text-center">@v.Details.Count/@v.QtyVoucher</td>
+                    <td class="small">@Ui.FavorTypeText(v.FavorType) · @Ui.IssueFormText(v.IssueForm)</td>
+                    <td><span class="badge bg-@(v.FlagActive ? "success" : "secondary")">@(v.FlagActive ? "Đang bật" : "Tạm dừng")</span></td>
+                </tr>
+            }
+            @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có đợt phát hành.</td></tr> }
+            </tbody>
+        </table>
+    </div></div></div>
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3">Tạo đợt phát hành</h6>
+            <form asp-action="Create" method="post">@Html.AntiForgeryToken()
+                <div class="mb-2"><input name="name" class="form-control" placeholder="Tên đợt phát hành *" required /></div>
+                <div class="mb-2"><input name="code" class="form-control text-uppercase" placeholder="Mã (tự sinh)" /></div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><label class="form-label small text-muted">Hiệu lực từ</label><input name="effDateStart" type="date" value="@DateTime.Today.ToString("yyyy-MM-dd")" class="form-control form-control-sm" /></div>
+                    <div class="col-6"><label class="form-label small text-muted">Đến</label><input name="effDateEnd" type="date" value="@DateTime.Today.AddMonths(1).ToString("yyyy-MM-dd")" class="form-control form-control-sm" /></div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><label class="form-label small text-muted">Số lượng voucher</label><input name="qtyVoucher" type="number" min="1" value="100" class="form-control form-control-sm" /></div>
+                    <div class="col-6"><label class="form-label small text-muted">Thời hạn (ngày)</label><input name="qtyDateUse" type="number" min="1" value="30" class="form-control form-control-sm" /></div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><label class="form-label small text-muted">Kiểu ưu đãi</label>
+                        <select name="favorType" class="form-select form-select-sm"><option value="0">Giảm giá</option><option value="1">Miễn phí giao hàng</option></select></div>
+                    <div class="col-6"><label class="form-label small text-muted">Hình thức</label>
+                        <select name="issueForm" class="form-select form-select-sm"><option value="1">Tặng</option><option value="0">Bán</option></select></div>
+                </div>
+                <div class="mb-3"><textarea name="remark" class="form-control form-control-sm" rows="2" placeholder="Ghi chú"></textarea></div>
+                <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Tạo</button>
+            </form>
+        </div></div>
+    </div>
+</div>

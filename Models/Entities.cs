@@ -470,3 +470,109 @@ public class BirthdayGrant : IOrgOwned
     public DateTime GrantedAt { get; set; } = DateTime.UtcNow;
     public string? Remark { get; set; }
 }
+
+// Kiểu ưu đãi của đợt phát hành voucher — theo nguồn FavorType (Const.Main.cs).
+public enum IssueFavorType { Discount = 0, Freeship = 1 }
+
+// Hình thức phát hành voucher — theo nguồn IssueForm (Const.Main.cs).
+public enum IssueFormType { Sell = 0, Give = 1 }
+
+// Trạng thái một voucher trong đợt phát hành — theo nguồn IssueStatus (Const.Main.cs).
+public enum IssueVoucherStatus { Pending = 0, Issued = 1, Evicted = 2, Cancelled = 3, Used = 4 }
+
+// Loại đối tượng áp dụng của điều kiện hàng hoá — theo nguồn IssueVoucherInsPrd_RefType.
+public enum IssueRefType { Product = 0, ProductGroup = 1 }
+
+// Đợt phát hành voucher — port từ Mst_IssueVoucher của hệ Loyalty.
+// Một đợt phát hành gồm: thông tin chung (mã, tên, hiệu lực, số lượng, thời hạn sử dụng),
+// kiểu ưu đãi (giảm giá / miễn phí giao hàng), hình thức phát hành (bán / tặng),
+// phạm vi áp dụng (chi nhánh / người tạo đơn / nhóm khách hàng) và điều kiện hàng hoá.
+// Vòng đời đợt: Tạm dừng ↔ Đang áp dụng (FlagActive).
+public class IssueVoucher : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";                 // IssueCode — mã đợt phát hành (người dùng nhập)
+    public string Name { get; set; } = "";                 // IssueName
+    public DateTime EffDateStart { get; set; } = DateTime.Today;
+    public DateTime EffDateEnd { get; set; } = DateTime.Today.AddMonths(1);
+    public int QtyVoucher { get; set; }                     // Số lượng voucher của đợt
+    public int QtyDateUse { get; set; }                     // Thời hạn sử dụng (số ngày kể từ ngày phát)
+    public IssueFavorType FavorType { get; set; } = IssueFavorType.Discount;   // Kiểu ưu đãi
+    public IssueFormType IssueForm { get; set; } = IssueFormType.Give;         // Hình thức phát hành
+    public bool FlagConditionUsePrd { get; set; } = true;   // true: chọn bất kỳ hàng hoá; false: chọn hàng/nhóm hàng
+    public bool FlagScopeBranch { get; set; } = true;       // true: tất cả chi nhánh
+    public bool FlagScopeOrderCreate { get; set; } = true;  // true: tất cả người tạo đơn
+    public bool FlagScopeCusType { get; set; } = true;      // true: tất cả nhóm khách hàng
+    public bool FlagActive { get; set; }                    // Trạng thái áp dụng (đang bật)
+    public string? Remark { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public List<IssueVoucherDtl> Details { get; set; } = new();
+    public List<IssueVoucherScope> Scopes { get; set; } = new();
+    public List<IssueVoucherProduct> Products { get; set; } = new();
+    public List<IssueVoucherPrice> Prices { get; set; } = new();
+
+    // Đợt đang thực sự áp dụng: đang bật và trong khoảng hiệu lực (nguồn FlagShow).
+    public bool IsLiveNow => FlagActive && DateTime.Today >= EffDateStart.Date && DateTime.Today <= EffDateEnd.Date;
+}
+
+// Một voucher đã phát trong đợt — port từ Mst_IssueVoucherDtl.
+// Mỗi voucher có người nhận, ngày phát/hết hạn/sử dụng và trạng thái riêng.
+public class IssueVoucherDtl : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int IssueVoucherId { get; set; }
+    public IssueVoucher? IssueVoucher { get; set; }
+    public string VoucherNo { get; set; } = "";            // VoucherID — mã voucher (duy nhất)
+    public string? Receiver { get; set; }                   // Reciever — người nhận
+    public IssueVoucherStatus Status { get; set; } = IssueVoucherStatus.Pending;
+    public DateTime? IssueDate { get; set; }                // Ngày phát hành
+    public DateTime? ExpDate { get; set; }                  // Ngày hết hạn
+    public DateTime? UseDate { get; set; }                  // Ngày sử dụng
+    public string? OrderNo { get; set; }                    // Đơn hàng sử dụng voucher
+    public string? Remark { get; set; }
+}
+
+// Phạm vi áp dụng của đợt — gom Mst_IssueVoucherScopeBranch/ScopeUser/ScopeCusGroup về một bảng có phân loại.
+public enum IssueScopeType { Branch = 0, OrderCreate = 1, CustomerGroup = 2 }
+
+public class IssueVoucherScope : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int IssueVoucherId { get; set; }
+    public IssueVoucher? IssueVoucher { get; set; }
+    public IssueScopeType ScopeType { get; set; }
+    public string Value { get; set; } = "";               // Mã chi nhánh / UserCode / nhóm khách hàng
+}
+
+// Điều kiện hàng hoá áp dụng — port từ Mst_IssueVoucherInsPrd.
+public class IssueVoucherProduct : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int IssueVoucherId { get; set; }
+    public IssueVoucher? IssueVoucher { get; set; }
+    public IssueRefType RefType { get; set; } = IssueRefType.Product;
+    public string RefCode { get; set; } = "";             // Mã hàng / nhóm hàng
+    public string? RefName { get; set; }                    // Tên hàng / nhóm hàng
+}
+
+// Cấu hình giá trị ưu đãi của đợt — port từ Mst_IssueVoucherInsPrice.
+// IssueType phân biệt dòng thuộc hình thức phát hành hay điều kiện áp dụng.
+public enum IssuePriceType { Issue = 0, Condition = 1 }
+
+public class IssueVoucherPrice : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int IssueVoucherId { get; set; }
+    public IssueVoucher? IssueVoucher { get; set; }
+    public IssuePriceType IssueType { get; set; } = IssuePriceType.Issue;
+    public string IssueTypeDtl { get; set; } = "";         // Giảm giá / Giá bán / Giá trị đơn hàng
+    public decimal UPDc { get; set; }                       // Giảm giá theo tiền
+    public decimal UPRateDc { get; set; }                   // Giảm giá theo %
+    public decimal UPDcMax { get; set; }                    // Mức giảm tối đa
+    public string? Remark { get; set; }
+}
