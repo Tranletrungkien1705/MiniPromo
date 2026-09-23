@@ -7,6 +7,9 @@ namespace MiniPromo.Services;
 // Kết quả tính khuyến mại cho một đơn hàng (port từ logic Prm_PromotionPrm).
 public record PromotionCalcOutcome(bool ok, string msg, decimal productDiscount, decimal orderDiscount, decimal totalDiscount, string? programCode);
 
+// Một dòng hàng của đơn để kiểm tra phạm vi sản phẩm (port từ #tbl_Ord_OrderDtl_Ref của OrderCalc).
+public record PromotionOrderLine(string RefCode, PromotionRefType RefType, int Qty, decimal Amount);
+
 public interface IPromotionProgramService
 {
     Task<List<PromotionProgram>> ProgramsAsync();
@@ -15,6 +18,8 @@ public interface IPromotionProgramService
     Task<(bool ok, string msg)> AddScopeAsync(PromotionScope s);
     Task<(bool ok, string msg)> AddPrmAsync(PromotionPrm prm);
     Task<(bool ok, string msg)> AddMainAsync(PromotionMain m);
+    // Thêm phạm vi sản phẩm/nhóm sản phẩm áp dụng (port từ Prm_PromotionMainSpec/Prm_PromotionPrmSpec).
+    Task<(bool ok, string msg)> AddProductScopeAsync(PromotionProductScope s);
     Task<(bool ok, string msg)> SetStatusAsync(int id, PromotionStatus status);
     // Duyệt chương trình: chỉ từ Chờ duyệt.
     Task<(bool ok, string msg)> ApproveAsync(int id, string? remark);
@@ -27,7 +32,8 @@ public interface IPromotionProgramService
     // Kiểm tra điều kiện áp dụng (tháng/ngày/thứ/giờ) tại một thời điểm.
     Task<(bool ok, string msg)> CheckScopeAsync(int id, DateTime at);
     // Tính khuyến mại cho một đơn hàng theo chương trình đang hiệu lực.
-    Task<PromotionCalcOutcome> CalcAsync(decimal orderAmount, int qty, DateTime? at);
+    // Nếu truyền orderLines: chỉ tính trên các dòng hàng thuộc phạm vi sản phẩm của chương trình.
+    Task<PromotionCalcOutcome> CalcAsync(decimal orderAmount, int qty, DateTime? at, List<PromotionOrderLine>? orderLines = null);
 }
 
 /// <summary>
@@ -40,11 +46,11 @@ public interface IPromotionProgramService
 public class PromotionProgramService(AppDbContext db) : IPromotionProgramService
 {
     public Task<List<PromotionProgram>> ProgramsAsync() =>
-        db.PromotionPrograms.Include(p => p.Scopes).Include(p => p.Prms).Include(p => p.Mains)
+        db.PromotionPrograms.Include(p => p.Scopes).Include(p => p.Prms).Include(p => p.Mains).Include(p => p.ProductScopes)
             .OrderByDescending(p => p.Id).ToListAsync();
 
     public Task<PromotionProgram?> GetProgramAsync(int id) =>
-        db.PromotionPrograms.Include(p => p.Scopes).Include(p => p.Prms).Include(p => p.Mains)
+        db.PromotionPrograms.Include(p => p.Scopes).Include(p => p.Prms).Include(p => p.Mains).Include(p => p.ProductScopes)
             .FirstOrDefaultAsync(p => p.Id == id);
 
     public async Task<(bool ok, string msg, int id)> CreateProgramAsync(PromotionProgram p)
@@ -90,6 +96,19 @@ public class PromotionProgramService(AppDbContext db) : IPromotionProgramService
         if (m.Qty < 0 || m.Amount < 0 || m.TotalValOrd < 0) return (false, "Điều kiện số lượng/tiền hàng không được âm.");
         db.PromotionMains.Add(m); await db.SaveChangesAsync();
         return (true, "Đã thêm điều kiện số lượng/tiền hàng.");
+    }
+
+    // Thêm phạm vi sản phẩm/nhóm sản phẩm áp dụng — port từ Prm_PromotionMainSpec/Prm_PromotionPrmSpec.
+    public async Task<(bool ok, string msg)> AddProductScopeAsync(PromotionProductScope s)
+    {
+        if (!await db.PromotionPrograms.AnyAsync(p => p.Id == s.PromotionProgramId)) return (false, "Không tìm thấy chương trình.");
+        if (string.IsNullOrWhiteSpace(s.RefCode)) return (false, "Cần mã sản phẩm/nhóm sản phẩm.");
+        s.RefCode = s.RefCode.Trim().ToUpper();
+        if (await db.PromotionProductScopes.AnyAsync(x => x.PromotionProgramId == s.PromotionProgramId
+                && x.Kind == s.Kind && x.RefType == s.RefType && x.RefCode == s.RefCode))
+            return (false, "Đối tượng đã có trong phạm vi áp dụng.");
+        db.PromotionProductScopes.Add(s); await db.SaveChangesAsync();
+        return (true, "Đã thêm phạm vi sản phẩm áp dụng.");
     }
 
     public async Task<(bool ok, string msg)> SetStatusAsync(int id, PromotionStatus status)
@@ -146,7 +165,7 @@ public class PromotionProgramService(AppDbContext db) : IPromotionProgramService
     public Task<PromotionProgram?> ActiveProgramAsync()
     {
         var today = DateTime.Today;
-        return db.PromotionPrograms.Include(p => p.Scopes).Include(p => p.Prms).Include(p => p.Mains)
+        return db.PromotionPrograms.Include(p => p.Scopes).Include(p => p.Prms).Include(p => p.Mains).Include(p => p.ProductScopes)
             .Where(p => p.Status == PromotionStatus.Finished && p.EffDTimeStart <= today && p.EffDTimeEnd >= today)
             .OrderBy(p => p.EffDTimeStart).FirstOrDefaultAsync();
     }
@@ -188,7 +207,9 @@ public class PromotionProgramService(AppDbContext db) : IPromotionProgramService
     // Giảm giá sản phẩm: theo tiền (UPDc) hoặc theo % (UPRateDc, chặn bởi UPDcMax).
     // Giảm giá đơn hàng: theo tiền (ValOrdDc) hoặc theo % (ValOrdRateDc, chặn bởi ValOrdDcMax).
     // Nếu FlagMulti: nhân phần giảm giá sản phẩm theo số lượng mua.
-    public async Task<PromotionCalcOutcome> CalcAsync(decimal orderAmount, int qty, DateTime? at)
+    // Nếu chương trình có phạm vi sản phẩm (ProductScopes) và truyền orderLines: chỉ tính trên các
+    // dòng hàng khớp RefCode/RefType (port từ #tbl_Ord_OrderDtl_Ref_Union_Filter của OrderCalc).
+    public async Task<PromotionCalcOutcome> CalcAsync(decimal orderAmount, int qty, DateTime? at, List<PromotionOrderLine>? orderLines = null)
     {
         if (orderAmount < 0) return new(false, "Số tiền đơn hàng không hợp lệ.", 0, 0, 0, null);
         var p = await ActiveProgramAsync();
@@ -198,11 +219,28 @@ public class PromotionProgramService(AppDbContext db) : IPromotionProgramService
         var scope = await CheckScopeAsync(p.Id, when);
         if (!scope.ok) return new(false, scope.msg, 0, 0, 0, p.Code);
 
+        // Phạm vi sản phẩm: nếu chương trình giới hạn theo sản phẩm/nhóm sản phẩm thì chỉ tính trên
+        // các dòng hàng thuộc phạm vi; nếu không có dòng nào khớp thì không áp dụng.
+        var productScopes = p.ProductScopes.Where(x => x.FlagActive).ToList();
+        decimal scopeAmount = orderAmount;
+        int scopeQty = qty;
+        if (productScopes.Count > 0)
+        {
+            if (orderLines == null || orderLines.Count == 0)
+                return new(false, "Chương trình chỉ áp dụng cho một số sản phẩm; cần cung cấp dòng hàng.", 0, 0, 0, p.Code);
+            var matched = orderLines.Where(l => productScopes.Any(s =>
+                s.RefType == l.RefType && string.Equals(s.RefCode, (l.RefCode ?? "").Trim().ToUpper(), StringComparison.OrdinalIgnoreCase))).ToList();
+            if (matched.Count == 0)
+                return new(false, "Đơn hàng không có sản phẩm thuộc phạm vi áp dụng.", 0, 0, 0, p.Code);
+            scopeAmount = matched.Sum(l => l.Amount);
+            scopeQty = matched.Sum(l => l.Qty);
+        }
+
         // Điều kiện số lượng/tiền hàng: nếu có dòng main đang bật thì phải thoả ít nhất một dòng.
         var mains = p.Mains.Where(m => m.FlagActive).ToList();
         if (mains.Count > 0)
         {
-            var pass = mains.Any(m => qty >= m.Qty && orderAmount >= m.Amount && orderAmount >= m.TotalValOrd);
+            var pass = mains.Any(m => scopeQty >= m.Qty && scopeAmount >= m.Amount && scopeAmount >= m.TotalValOrd);
             if (!pass) return new(false, "Đơn hàng chưa đạt điều kiện số lượng/tiền hàng.", 0, 0, 0, p.Code);
         }
 
@@ -213,23 +251,23 @@ public class PromotionProgramService(AppDbContext db) : IPromotionProgramService
         decimal productDiscount = prm.UPDc;
         if (prm.UPRateDc > 0)
         {
-            var byRate = orderAmount * prm.UPRateDc / 100m;
+            var byRate = scopeAmount * prm.UPRateDc / 100m;
             if (prm.UPDcMax > 0 && byRate > prm.UPDcMax) byRate = prm.UPDcMax;
             productDiscount += byRate;
         }
-        if (p.FlagMulti && qty > 1) productDiscount *= qty;
+        if (p.FlagMulti && scopeQty > 1) productDiscount *= scopeQty;
 
         // Giảm giá đơn hàng.
         decimal orderDiscount = prm.ValOrdDc;
         if (prm.ValOrdRateDc > 0)
         {
-            var byRate = orderAmount * prm.ValOrdRateDc / 100m;
+            var byRate = scopeAmount * prm.ValOrdRateDc / 100m;
             if (prm.ValOrdDcMax > 0 && byRate > prm.ValOrdDcMax) byRate = prm.ValOrdDcMax;
             orderDiscount += byRate;
         }
 
         var total = productDiscount + orderDiscount;
-        if (total > orderAmount) total = orderAmount;   // không giảm quá giá trị đơn hàng
+        if (total > scopeAmount) total = scopeAmount;   // không giảm quá giá trị phần áp dụng
         return new(true, "Đủ điều kiện áp dụng.", productDiscount, orderDiscount, total, p.Code);
     }
 }

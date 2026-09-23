@@ -30,6 +30,12 @@ public enum PromotionPrmType { Order = 0, Product = 1, ProductUPDc = 2, ProductU
 // Loại điều kiện áp dụng (scope) — gom các bảng Prm_*Scope của nguồn về một bảng duy nhất.
 public enum PromotionScopeType { Date = 0, DayOfWeek = 1, Time = 2, Month = 3, Day = 4, Org = 5, User = 6, CustomerGroup = 7 }
 
+// Loại đối tượng áp dụng của phạm vi sản phẩm — theo nguồn PromotionRefType (Const.Main.BE.cs).
+public enum PromotionRefType { Product = 0, ProductGroup = 1, VoucherIssue = 2, Voucher = 3 }
+
+// Vai trò của dòng phạm vi sản phẩm — theo nguồn Prm_PromotionMainSpec (điều kiện) và Prm_PromotionPrmSpec (hình thức).
+public enum PromotionProductScopeKind { Main = 0, Prm = 1 }
+
 public class Org
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -235,6 +241,7 @@ public class PromotionProgram : IOrgOwned
     public List<PromotionScope> Scopes { get; set; } = new();
     public List<PromotionPrm> Prms { get; set; } = new();
     public List<PromotionMain> Mains { get; set; } = new();
+    public List<PromotionProductScope> ProductScopes { get; set; } = new();
 
     public bool IsLiveNow => Status == PromotionStatus.Finished && DateTime.Today >= EffDTimeStart.Date && DateTime.Today <= EffDTimeEnd.Date;
 }
@@ -269,6 +276,26 @@ public class PromotionPrm : IOrgOwned
     public decimal ValOrdDc { get; set; }                   // Giảm giá đơn hàng theo tiền
     public decimal ValOrdRateDc { get; set; }               // Giảm giá đơn hàng theo %
     public decimal ValOrdDcMax { get; set; }                // Mức giảm tối đa khi giảm đơn hàng theo %
+    public bool FlagActive { get; set; } = true;
+    public string? Remark { get; set; }
+}
+
+// Phạm vi sản phẩm/nhóm sản phẩm áp dụng — port từ Prm_PromotionMainSpec + Prm_PromotionPrmSpec.
+// Mỗi dòng gắn một đối tượng (sản phẩm / nhóm sản phẩm / voucher) vào chương trình khuyến mại.
+// Kind phân biệt dòng thuộc điều kiện (Main) hay thuộc hình thức khuyến mại (Prm); MapIdx dùng cho
+// trường hợp "giảm giá theo số lượng mua" để lấy danh sách sản phẩm theo từng dòng hình thức.
+public class PromotionProductScope : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int PromotionProgramId { get; set; }
+    public PromotionProgram? PromotionProgram { get; set; }
+    public PromotionProductScopeKind Kind { get; set; } = PromotionProductScopeKind.Main;
+    public int Idx { get; set; }                            // Thứ tự dòng (khớp với PromotionPrm/PromotionMain.Idx)
+    public PromotionRefType RefType { get; set; } = PromotionRefType.Product;
+    public string RefCode { get; set; } = "";              // Mã sản phẩm / nhóm sản phẩm / voucher (hệ thống)
+    public string? RefName { get; set; }                    // Tên do người dùng nhập
+    public int? MapIdx { get; set; }                        // Ánh xạ sang dòng hình thức khi giảm giá theo số lượng
     public bool FlagActive { get; set; } = true;
     public string? Remark { get; set; }
 }

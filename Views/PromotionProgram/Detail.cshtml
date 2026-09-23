@@ -63,6 +63,20 @@
                 </tbody>
             </table>
         </div></div>
+
+        <div class="card mt-3"><div class="card-body">
+            <h6 class="fw-bold mb-2">Phạm vi sản phẩm áp dụng</h6>
+            <table class="table table-sm align-middle">
+                <thead><tr><th>Vai trò</th><th>#</th><th>Loại</th><th>Mã</th><th>Tên</th><th>Map</th><th>Trạng thái</th></tr></thead>
+                <tbody>
+                @foreach (var s in Model.ProductScopes)
+                {
+                    <tr><td class="small">@Ui.ProductScopeKindText(s.Kind)</td><td class="small">@s.Idx</td><td class="small">@Ui.RefTypeText(s.RefType)</td><td class="fw-semibold small">@s.RefCode</td><td class="small text-muted">@s.RefName</td><td class="small text-muted">@s.MapIdx</td><td>@(s.FlagActive ? "Bật" : "Tắt")</td></tr>
+                }
+                @if (Model.ProductScopes.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-3">Không giới hạn theo sản phẩm (áp dụng mọi sản phẩm).</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
     </div>
     <div class="col-lg-4">
         <div class="card mb-3"><div class="card-body">
@@ -120,6 +134,33 @@
                     <div class="col-6"><input name="totalValOrd" type="number" step="1000" class="form-control form-control-sm" placeholder="Tổng tiền hàng" /></div>
                 </div>
                 <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Thêm điều kiện</button>
+            </form>
+        </div></div>
+
+        <div class="card mt-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Thêm phạm vi sản phẩm áp dụng</h6>
+            <form asp-action="AddProductScope" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <select name="kind" class="form-select form-select-sm">
+                            <option value="0">Điều kiện</option>
+                            <option value="1">Hình thức</option>
+                        </select>
+                    </div>
+                    <div class="col-6"><input name="idx" type="number" value="1" class="form-control form-control-sm" placeholder="Thứ tự" /></div>
+                </div>
+                <div class="mb-2">
+                    <select name="refType" class="form-select form-select-sm">
+                        <option value="0">Sản phẩm</option>
+                        <option value="1">Nhóm sản phẩm</option>
+                        <option value="2">Phát voucher</option>
+                        <option value="3">Voucher</option>
+                    </select>
+                </div>
+                <div class="mb-2"><input name="refCode" class="form-control form-control-sm" placeholder="Mã sản phẩm/nhóm *" required /></div>
+                <div class="mb-2"><input name="refName" class="form-control form-control-sm" placeholder="Tên (tuỳ chọn)" /></div>
+                <div class="mb-3"><input name="mapIdx" type="number" class="form-control form-control-sm" placeholder="Map (dòng hình thức)" /></div>
+                <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Thêm phạm vi</button>
             </form>
         </div></div>
     </div>

@@ -316,6 +316,18 @@ public class PromotionProgramController(IPromotionProgramService svc) : Controll
         TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
     }
 
+    // Thêm phạm vi sản phẩm/nhóm sản phẩm áp dụng (port từ Prm_PromotionMainSpec/Prm_PromotionPrmSpec).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddProductScope(int id, PromotionProductScopeKind kind, int idx, PromotionRefType refType, string refCode, string? refName, int? mapIdx, string? remark)
+    {
+        var (ok, msg) = await svc.AddProductScopeAsync(new PromotionProductScope
+        {
+            PromotionProgramId = id, Kind = kind, Idx = idx, RefType = refType,
+            RefCode = refCode ?? "", RefName = refName, MapIdx = mapIdx, Remark = remark
+        });
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
     // Duyệt chương trình.
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Approve(int id, string? remark)

@@ -102,4 +102,20 @@ public static class Ui
         PromotionScopeType.CustomerGroup => "Nhóm khách hàng",
         _ => t.ToString()
     };
+
+    public static string RefTypeText(PromotionRefType t) => t switch
+    {
+        PromotionRefType.Product      => "Sản phẩm",
+        PromotionRefType.ProductGroup => "Nhóm sản phẩm",
+        PromotionRefType.VoucherIssue => "Phát voucher",
+        PromotionRefType.Voucher      => "Voucher",
+        _ => t.ToString()
+    };
+
+    public static string ProductScopeKindText(PromotionProductScopeKind k) => k switch
+    {
+        PromotionProductScopeKind.Main => "Điều kiện",
+        PromotionProductScopeKind.Prm  => "Hình thức",
+        _ => k.ToString()
+    };
 }

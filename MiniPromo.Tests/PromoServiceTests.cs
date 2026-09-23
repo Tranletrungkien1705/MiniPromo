@@ -975,6 +975,110 @@ public class PromotionProgramServiceTests
             Assert.Equal(1_000_000, o.totalDiscount);   // không giảm quá giá trị đơn hàng
         }
     }
+
+    // ---- Phạm vi sản phẩm áp dụng (port từ Prm_PromotionMainSpec/Prm_PromotionPrmSpec) ----
+
+    [Fact]
+    public async Task AddProductScope_EmptyRefCode_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new PromotionProgram { Name = "PS", EffDTimeStart = DateTime.Today, EffDTimeEnd = DateTime.Today.AddDays(10) });
+            var (ok, _) = await svc.AddProductScopeAsync(new PromotionProductScope { PromotionProgramId = id, RefCode = "" });
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task AddProductScope_Duplicate_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new PromotionProgram { Name = "PS", EffDTimeStart = DateTime.Today, EffDTimeEnd = DateTime.Today.AddDays(10) });
+            await svc.AddProductScopeAsync(new PromotionProductScope { PromotionProgramId = id, RefType = PromotionRefType.Product, RefCode = "SP001" });
+            var (ok, _) = await svc.AddProductScopeAsync(new PromotionProductScope { PromotionProgramId = id, RefType = PromotionRefType.Product, RefCode = "sp001" });
+            Assert.False(ok);   // trùng sau khi chuẩn hoá hoa/thường
+        }
+    }
+
+    [Fact]
+    public async Task Calc_WithProductScope_NoLines_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new PromotionProgram { Name = "PS", EffDTimeStart = DateTime.Today, EffDTimeEnd = DateTime.Today.AddDays(30) });
+            await svc.AddPrmAsync(new PromotionPrm { PromotionProgramId = id, Idx = 1, ValOrdRateDc = 10 });
+            await svc.AddProductScopeAsync(new PromotionProductScope { PromotionProgramId = id, RefType = PromotionRefType.Product, RefCode = "SP001" });
+            await svc.ApproveAsync(id, null);
+            await svc.FinishAsync(id, null);
+
+            var o = await svc.CalcAsync(1_000_000, 1, DateTime.Today);   // không truyền dòng hàng
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_WithProductScope_NoMatchingLine_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new PromotionProgram { Name = "PS", EffDTimeStart = DateTime.Today, EffDTimeEnd = DateTime.Today.AddDays(30) });
+            await svc.AddPrmAsync(new PromotionPrm { PromotionProgramId = id, Idx = 1, ValOrdRateDc = 10 });
+            await svc.AddProductScopeAsync(new PromotionProductScope { PromotionProgramId = id, RefType = PromotionRefType.Product, RefCode = "SP001" });
+            await svc.ApproveAsync(id, null);
+            await svc.FinishAsync(id, null);
+
+            var lines = new List<PromotionOrderLine> { new("SP999", PromotionRefType.Product, 1, 1_000_000) };
+            var o = await svc.CalcAsync(1_000_000, 1, DateTime.Today, lines);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_WithProductScope_OnlyMatchingLinesCounted()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new PromotionProgram { Name = "PS", EffDTimeStart = DateTime.Today, EffDTimeEnd = DateTime.Today.AddDays(30) });
+            await svc.AddPrmAsync(new PromotionPrm { PromotionProgramId = id, Idx = 1, ValOrdRateDc = 10, ValOrdDcMax = 0 });
+            await svc.AddProductScopeAsync(new PromotionProductScope { PromotionProgramId = id, RefType = PromotionRefType.Product, RefCode = "SP001" });
+            await svc.ApproveAsync(id, null);
+            await svc.FinishAsync(id, null);
+
+            // Đơn 1.000.000 nhưng chỉ dòng SP001 (400.000) thuộc phạm vi → giảm 10% của 400.000 = 40.000.
+            var lines = new List<PromotionOrderLine>
+            {
+                new("SP001", PromotionRefType.Product, 1, 400_000),
+                new("SP999", PromotionRefType.Product, 1, 600_000)
+            };
+            var o = await svc.CalcAsync(1_000_000, 2, DateTime.Today, lines);
+            Assert.True(o.ok);
+            Assert.Equal(40_000, o.orderDiscount);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_WithProductGroupScope_MatchesByRefType()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new PromotionProgram { Name = "PS", EffDTimeStart = DateTime.Today, EffDTimeEnd = DateTime.Today.AddDays(30) });
+            await svc.AddPrmAsync(new PromotionPrm { PromotionProgramId = id, Idx = 1, ValOrdRateDc = 10, ValOrdDcMax = 0 });
+            await svc.AddProductScopeAsync(new PromotionProductScope { PromotionProgramId = id, RefType = PromotionRefType.ProductGroup, RefCode = "GRP01" });
+            await svc.ApproveAsync(id, null);
+            await svc.FinishAsync(id, null);
+
+            // Cùng mã GRP01 nhưng RefType khác (Product) → không khớp; chỉ dòng ProductGroup mới tính.
+            var lines = new List<PromotionOrderLine>
+            {
+                new("GRP01", PromotionRefType.Product, 1, 500_000),
+                new("GRP01", PromotionRefType.ProductGroup, 1, 300_000)
+            };
+            var o = await svc.CalcAsync(800_000, 2, DateTime.Today, lines);
+            Assert.True(o.ok);
+            Assert.Equal(30_000, o.orderDiscount);   // 10% của 300.000
+        }
+    }
 }
 
 /// <summary>Test chương trình giới thiệu xe: vòng đời duyệt/hoàn tất/huỷ, chỉ 1 chương trình hiệu lực/đại lý, tính giá trị thưởng theo model.</summary>

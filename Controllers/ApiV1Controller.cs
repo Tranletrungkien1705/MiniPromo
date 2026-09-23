@@ -383,7 +383,8 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
             status = (int)p.Status, statusText = Ui.Promotion(p.Status).text, live = p.IsLiveNow,
             scopes = p.Scopes.Select(s => new { s.Id, scopeType = (int)s.ScopeType, scopeTypeText = Ui.ScopeTypeText(s.ScopeType), s.Value, s.ValueEnd, s.Active }),
             prms = p.Prms.Select(x => new { x.Id, x.Idx, x.Qty, x.UPDc, x.UPRateDc, x.UPDcMax, x.ValOrdDc, x.ValOrdRateDc, x.ValOrdDcMax, x.Remark }),
-            mains = p.Mains.Select(m => new { m.Id, m.Idx, m.Qty, m.Amount, m.TotalValOrd })
+            mains = p.Mains.Select(m => new { m.Id, m.Idx, m.Qty, m.Amount, m.TotalValOrd }),
+            productScopes = p.ProductScopes.Select(s => new { s.Id, kind = (int)s.Kind, kindText = Ui.ProductScopeKindText(s.Kind), refType = (int)s.RefType, refTypeText = Ui.RefTypeText(s.RefType), s.RefCode, s.RefName, s.Idx, s.MapIdx, s.FlagActive, s.Remark })
         });
     }
 
@@ -432,6 +433,19 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
         return ok ? Ok(new { ok }) : BadRequest(new { error = msg });
     }
 
+    // Thêm phạm vi sản phẩm/nhóm sản phẩm áp dụng (port từ Prm_PromotionMainSpec/Prm_PromotionPrmSpec).
+    [HttpPost("promotion-programs/{id:int}/product-scopes")]
+    public async Task<IActionResult> AddPromotionProductScope(int id, [FromBody] PromotionProductScopeReq r)
+    {
+        var (ok, msg) = await promotions.AddProductScopeAsync(new PromotionProductScope
+        {
+            PromotionProgramId = id, Kind = (PromotionProductScopeKind)r.Kind, Idx = r.Idx,
+            RefType = (PromotionRefType)r.RefType, RefCode = r.RefCode ?? "", RefName = r.RefName,
+            MapIdx = r.MapIdx, FlagActive = r.FlagActive, Remark = r.Remark
+        });
+        return ok ? Ok(new { ok }) : BadRequest(new { error = msg });
+    }
+
     [HttpPost("promotion-programs/{id:int}/status")]
     public async Task<IActionResult> SetPromotionProgramStatus(int id, [FromBody] StatusReq r)
     {
@@ -467,7 +481,8 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
     [HttpPost("promotion/calc")]
     public async Task<IActionResult> CalcPromotion([FromBody] PromotionCalcReq r)
     {
-        var o = await promotions.CalcAsync(r.OrderAmount, r.Qty, r.At);
+        var lines = r.Lines?.Select(l => new PromotionOrderLine(l.RefCode ?? "", (PromotionRefType)l.RefType, l.Qty, l.Amount)).ToList();
+        var o = await promotions.CalcAsync(r.OrderAmount, r.Qty, r.At, lines);
         return o.ok ? Ok(new { ok = o.ok, msg = o.msg, productDiscount = o.productDiscount, orderDiscount = o.orderDiscount, totalDiscount = o.totalDiscount, programCode = o.programCode })
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
@@ -671,7 +686,9 @@ public class PromotionProgramReq { public string? Code { get; set; } public stri
 public class PromotionScopeReq { public int ScopeType { get; set; } public string? Value { get; set; } public string? ValueEnd { get; set; } }
 public class PromotionPrmReq { public int Idx { get; set; } public int Qty { get; set; } public decimal UPDc { get; set; } public decimal UPRateDc { get; set; } public decimal UPDcMax { get; set; } public decimal ValOrdDc { get; set; } public decimal ValOrdRateDc { get; set; } public decimal ValOrdDcMax { get; set; } public string? Remark { get; set; } }
 public class PromotionMainReq { public int Idx { get; set; } public int Qty { get; set; } public decimal Amount { get; set; } public decimal TotalValOrd { get; set; } }
-public class PromotionCalcReq { public decimal OrderAmount { get; set; } public int Qty { get; set; } public DateTime? At { get; set; } }
+public class PromotionProductScopeReq { public int Kind { get; set; } public int Idx { get; set; } public int RefType { get; set; } public string? RefCode { get; set; } public string? RefName { get; set; } public int? MapIdx { get; set; } public bool FlagActive { get; set; } = true; public string? Remark { get; set; } }
+public class PromotionCalcReq { public decimal OrderAmount { get; set; } public int Qty { get; set; } public DateTime? At { get; set; } public List<PromotionOrderLineReq>? Lines { get; set; } }
+public class PromotionOrderLineReq { public string? RefCode { get; set; } public int RefType { get; set; } public int Qty { get; set; } public decimal Amount { get; set; } }
 public class CarRecommendReq { public string? Code { get; set; } public string Name { get; set; } = ""; public string? DealerCode { get; set; } public DateTime EffDateStart { get; set; } public DateTime EffDateEnd { get; set; } public bool FlagAllModel { get; set; } = true; public decimal PointValAllModel { get; set; } public string? Remark { get; set; } }
 public class CarRecommendDtlReq { public string? ModelCode { get; set; } public decimal PointVal { get; set; } public string? Remark { get; set; } }
 public class CarRecommendCalcReq { public string? DealerCode { get; set; } public string? ModelCode { get; set; } }

@@ -22,6 +22,7 @@ public class AppDbContext : DbContext
     public DbSet<PromotionScope> PromotionScopes => Set<PromotionScope>();
     public DbSet<PromotionPrm> PromotionPrms => Set<PromotionPrm>();
     public DbSet<PromotionMain> PromotionMains => Set<PromotionMain>();
+    public DbSet<PromotionProductScope> PromotionProductScopes => Set<PromotionProductScope>();
     public DbSet<CarRecommend> CarRecommends => Set<CarRecommend>();
     public DbSet<CarRecommendDtl> CarRecommendDtls => Set<CarRecommendDtl>();
     public DbSet<CardPromotionProgram> CardPromotionPrograms => Set<CardPromotionProgram>();
@@ -128,6 +129,11 @@ public class AppDbContext : DbContext
             e.Property(x => x.Amount).HasPrecision(18, 2);
             e.Property(x => x.TotalValOrd).HasPrecision(18, 2);
             e.HasOne(x => x.PromotionProgram).WithMany(x => x.Mains).HasForeignKey(x => x.PromotionProgramId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PromotionProductScope>(e =>
+        {
+            e.HasOne(x => x.PromotionProgram).WithMany(x => x.ProductScopes).HasForeignKey(x => x.PromotionProgramId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<CarRecommend>(e =>
