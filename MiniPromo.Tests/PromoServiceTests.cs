@@ -702,3 +702,277 @@ public class CarPromotionServiceTests
         }
     }
 }
+
+/// <summary>Test chương trình khuyến mại chung: vòng đời duyệt/hoàn tất/huỷ, điều kiện áp dụng (thứ/giờ/tháng/ngày), tính giảm giá sản phẩm/đơn hàng.</summary>
+public class PromotionProgramServiceTests
+{
+    private static (AppDbContext db, IPromotionProgramService svc, SqliteConnection conn) NewSvc()
+    {
+        var conn = new SqliteConnection("DataSource=:memory:"); conn.Open();
+        var opt = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conn).Options;
+        var db = new AppDbContext(opt, new TenantContext { OrgId = TenantContext.DefaultOrgId });
+        db.Database.EnsureCreated();
+        return (db, new PromotionProgramService(db), conn);
+    }
+
+    // Chương trình đã hoàn tất, áp dụng mọi thời điểm, giảm 10% đơn hàng (tối đa 200.000đ).
+    private static async Task<PromotionProgram> FinishedProgram(IPromotionProgramService svc,
+        decimal valOrdRateDc = 10, decimal valOrdDcMax = 200_000, decimal valOrdDc = 0)
+    {
+        var (_, _, id) = await svc.CreateProgramAsync(new PromotionProgram
+        {
+            Code = "PRM" + Guid.NewGuid().ToString("N")[..6].ToUpper(), Name = "CT test",
+            MainType = PromotionMainType.Order, PrmType = PromotionPrmType.Order,
+            EffDTimeStart = DateTime.Today, EffDTimeEnd = DateTime.Today.AddDays(30)
+        });
+        await svc.AddPrmAsync(new PromotionPrm { PromotionProgramId = id, Idx = 1, ValOrdRateDc = valOrdRateDc, ValOrdDcMax = valOrdDcMax, ValOrdDc = valOrdDc });
+        await svc.ApproveAsync(id, null);
+        await svc.FinishAsync(id, null);
+        return (await svc.GetProgramAsync(id))!;
+    }
+
+    [Fact]
+    public async Task Create_DuplicateCode_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.CreateProgramAsync(new PromotionProgram { Code = "DUP", Name = "A", EffDTimeStart = DateTime.Today, EffDTimeEnd = DateTime.Today.AddDays(10) });
+            var (ok, _, _) = await svc.CreateProgramAsync(new PromotionProgram { Code = "DUP", Name = "B", EffDTimeStart = DateTime.Today, EffDTimeEnd = DateTime.Today.AddDays(10) });
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task Create_EndBeforeStart_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, _) = await svc.CreateProgramAsync(new PromotionProgram { Name = "X", EffDTimeStart = DateTime.Today, EffDTimeEnd = DateTime.Today.AddDays(-1) });
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task AddPrm_NoDiscount_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new PromotionProgram { Name = "Z", EffDTimeStart = DateTime.Today, EffDTimeEnd = DateTime.Today.AddDays(10) });
+            var (ok, _) = await svc.AddPrmAsync(new PromotionPrm { PromotionProgramId = id, Idx = 1 });
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task AddPrm_RateOver100_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new PromotionProgram { Name = "Z", EffDTimeStart = DateTime.Today, EffDTimeEnd = DateTime.Today.AddDays(10) });
+            var (ok, _) = await svc.AddPrmAsync(new PromotionPrm { PromotionProgramId = id, Idx = 1, ValOrdRateDc = 150 });
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task Approve_FromPending_Succeeds()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new PromotionProgram { Name = "A", EffDTimeStart = DateTime.Today, EffDTimeEnd = DateTime.Today.AddDays(10) });
+            var (ok, _) = await svc.ApproveAsync(id, null);
+            Assert.True(ok);
+            Assert.Equal(PromotionStatus.Approved, (await svc.GetProgramAsync(id))!.Status);
+        }
+    }
+
+    [Fact]
+    public async Task Finish_FromPending_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new PromotionProgram { Name = "A", EffDTimeStart = DateTime.Today, EffDTimeEnd = DateTime.Today.AddDays(10) });
+            await svc.AddPrmAsync(new PromotionPrm { PromotionProgramId = id, Idx = 1, ValOrdDc = 10_000 });
+            var (ok, _) = await svc.FinishAsync(id, null);   // chưa duyệt
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task Finish_NoPrm_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new PromotionProgram { Name = "A", EffDTimeStart = DateTime.Today, EffDTimeEnd = DateTime.Today.AddDays(10) });
+            await svc.ApproveAsync(id, null);
+            var (ok, _) = await svc.FinishAsync(id, null);   // chưa có hình thức KM
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task Cancel_FromApproved_Succeeds()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new PromotionProgram { Name = "A", EffDTimeStart = DateTime.Today, EffDTimeEnd = DateTime.Today.AddDays(10) });
+            await svc.ApproveAsync(id, null);
+            var (ok, _) = await svc.CancelAsync(id, null);
+            Assert.True(ok);
+            Assert.Equal(PromotionStatus.Cancelled, (await svc.GetProgramAsync(id))!.Status);
+        }
+    }
+
+    [Fact]
+    public async Task Cancel_FromFinished_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var p = await FinishedProgram(svc);
+            var (ok, _) = await svc.CancelAsync(p.Id, null);
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_OrderRate_CapsAtMax()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await FinishedProgram(svc, valOrdRateDc: 10, valOrdDcMax: 200_000);
+            // 10% của 5.000.000 = 500.000 > max 200.000 → chặn ở 200.000.
+            var o = await svc.CalcAsync(5_000_000, 1, DateTime.Today);
+            Assert.True(o.ok);
+            Assert.Equal(200_000, o.orderDiscount);
+            Assert.Equal(200_000, o.totalDiscount);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_OrderRate_UnderMax()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await FinishedProgram(svc, valOrdRateDc: 10, valOrdDcMax: 200_000);
+            // 10% của 1.000.000 = 100.000 < max → giữ 100.000.
+            var o = await svc.CalcAsync(1_000_000, 1, DateTime.Today);
+            Assert.True(o.ok);
+            Assert.Equal(100_000, o.orderDiscount);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_NoActiveProgram_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var o = await svc.CalcAsync(1_000_000, 1, DateTime.Today);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_ScopeDayOfWeek_Mismatch_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            // Chỉ áp dụng Thứ Hai (1). Tính vào Chủ Nhật (0) → từ chối.
+            var (_, _, id) = await svc.CreateProgramAsync(new PromotionProgram
+            {
+                Name = "T2", EffDTimeStart = DateTime.Today, EffDTimeEnd = DateTime.Today.AddDays(30),
+                FlagAllDayOfWeek = false
+            });
+            await svc.AddScopeAsync(new PromotionScope { PromotionProgramId = id, ScopeType = PromotionScopeType.DayOfWeek, Value = "1" });
+            await svc.AddPrmAsync(new PromotionPrm { PromotionProgramId = id, Idx = 1, ValOrdDc = 50_000 });
+            await svc.ApproveAsync(id, null);
+            await svc.FinishAsync(id, null);
+
+            // Tìm một ngày Chủ Nhật trong khoảng hiệu lực.
+            var sunday = DateTime.Today;
+            while (sunday.DayOfWeek != DayOfWeek.Sunday) sunday = sunday.AddDays(1);
+            var o = await svc.CalcAsync(1_000_000, 1, sunday);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_ScopeDayOfWeek_Match_Succeeds()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new PromotionProgram
+            {
+                Name = "T2", EffDTimeStart = DateTime.Today, EffDTimeEnd = DateTime.Today.AddDays(30),
+                FlagAllDayOfWeek = false
+            });
+            await svc.AddScopeAsync(new PromotionScope { PromotionProgramId = id, ScopeType = PromotionScopeType.DayOfWeek, Value = "1" });
+            await svc.AddPrmAsync(new PromotionPrm { PromotionProgramId = id, Idx = 1, ValOrdDc = 50_000 });
+            await svc.ApproveAsync(id, null);
+            await svc.FinishAsync(id, null);
+
+            var monday = DateTime.Today;
+            while (monday.DayOfWeek != DayOfWeek.Monday) monday = monday.AddDays(1);
+            var o = await svc.CalcAsync(1_000_000, 1, monday);
+            Assert.True(o.ok);
+            Assert.Equal(50_000, o.orderDiscount);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_MainCondition_NotMet_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new PromotionProgram
+            {
+                Name = "MIN", EffDTimeStart = DateTime.Today, EffDTimeEnd = DateTime.Today.AddDays(30)
+            });
+            await svc.AddPrmAsync(new PromotionPrm { PromotionProgramId = id, Idx = 1, ValOrdDc = 50_000 });
+            await svc.AddMainAsync(new PromotionMain { PromotionProgramId = id, Idx = 1, TotalValOrd = 500_000 });
+            await svc.ApproveAsync(id, null);
+            await svc.FinishAsync(id, null);
+
+            var o = await svc.CalcAsync(300_000, 1, DateTime.Today);   // < 500.000
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_ProductDiscount_WithMulti()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new PromotionProgram
+            {
+                Name = "MULTI", EffDTimeStart = DateTime.Today, EffDTimeEnd = DateTime.Today.AddDays(30),
+                FlagMulti = true
+            });
+            await svc.AddPrmAsync(new PromotionPrm { PromotionProgramId = id, Idx = 1, UPDc = 20_000 });
+            await svc.ApproveAsync(id, null);
+            await svc.FinishAsync(id, null);
+
+            var o = await svc.CalcAsync(1_000_000, 3, DateTime.Today);
+            Assert.True(o.ok);
+            Assert.Equal(60_000, o.productDiscount);   // 20.000 × 3
+        }
+    }
+
+    [Fact]
+    public async Task Calc_TotalDiscount_CappedAtOrderAmount()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreateProgramAsync(new PromotionProgram
+            {
+                Name = "CAP", EffDTimeStart = DateTime.Today, EffDTimeEnd = DateTime.Today.AddDays(30)
+            });
+            await svc.AddPrmAsync(new PromotionPrm { PromotionProgramId = id, Idx = 1, ValOrdDc = 5_000_000 });
+            await svc.ApproveAsync(id, null);
+            await svc.FinishAsync(id, null);
+
+            var o = await svc.CalcAsync(1_000_000, 1, DateTime.Today);
+            Assert.True(o.ok);
+            Assert.Equal(1_000_000, o.totalDiscount);   // không giảm quá giá trị đơn hàng
+        }
+    }
+}

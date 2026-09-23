@@ -46,4 +46,44 @@ public static class Ui
         CarPromotionStatus.Cancelled => ("Đã huỷ", "dark"),
         _ => (s.ToString(), "secondary")
     };
+
+    public static (string text, string css) Promotion(PromotionStatus s) => s switch
+    {
+        PromotionStatus.Pending   => ("Chờ duyệt", "secondary"),
+        PromotionStatus.Approved  => ("Đã duyệt", "info"),
+        PromotionStatus.Finished  => ("Hoàn tất", "success"),
+        PromotionStatus.Cancelled => ("Đã huỷ", "dark"),
+        _ => (s.ToString(), "secondary")
+    };
+
+    public static string MainTypeText(PromotionMainType t) => t switch
+    {
+        PromotionMainType.Order           => "Đơn hàng",
+        PromotionMainType.Product         => "Sản phẩm",
+        PromotionMainType.ProductAndOrder => "Sản phẩm & đơn hàng",
+        _ => t.ToString()
+    };
+
+    public static string PrmTypeText(PromotionPrmType t) => t switch
+    {
+        PromotionPrmType.Order            => "Giảm giá đơn hàng",
+        PromotionPrmType.Product          => "Giảm giá sản phẩm",
+        PromotionPrmType.ProductUPDc      => "Giảm giá sản phẩm theo tiền",
+        PromotionPrmType.ProductUPDcByQty => "Giảm giá sản phẩm theo số lượng",
+        PromotionPrmType.Voucher          => "Tặng voucher",
+        _ => t.ToString()
+    };
+
+    public static string ScopeTypeText(PromotionScopeType t) => t switch
+    {
+        PromotionScopeType.Date          => "Ngày",
+        PromotionScopeType.DayOfWeek     => "Thứ",
+        PromotionScopeType.Time          => "Giờ",
+        PromotionScopeType.Month         => "Tháng",
+        PromotionScopeType.Day           => "Ngày trong tháng",
+        PromotionScopeType.Org           => "Chi nhánh",
+        PromotionScopeType.User          => "Người tạo",
+        PromotionScopeType.CustomerGroup => "Nhóm khách hàng",
+        _ => t.ToString()
+    };
 }

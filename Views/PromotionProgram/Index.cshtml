@@ -1,0 +1,62 @@
+@model List<PromotionProgram>
+@{ ViewData["Title"] = "Chương trình khuyến mại"; }
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="fw-bold mb-0">Chương trình khuyến mại</h5>
+</div>
+<div class="row g-3">
+    <div class="col-lg-8"><div class="card"><div class="card-body">
+        <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>Mã</th><th>Tên</th><th>Khuyến mại theo</th><th>Hiệu lực</th><th class="text-center">Điều kiện</th><th>Trạng thái</th></tr></thead>
+            <tbody>
+            @foreach (var p in Model)
+            {
+                var (t, css) = Ui.Promotion(p.Status);
+                <tr style="cursor:pointer" onclick="location.href='/PromotionProgram/Detail/@p.Id'">
+                    <td class="fw-semibold small">@p.Code</td><td>@p.Name</td>
+                    <td class="small text-muted">@Ui.MainTypeText(p.MainType)</td>
+                    <td class="small text-muted">@p.EffDTimeStart.ToString("dd/MM") – @p.EffDTimeEnd.ToString("dd/MM/yy")</td>
+                    <td class="text-center">@p.Scopes.Count</td>
+                    <td><span class="badge bg-@css">@t</span></td>
+                </tr>
+            }
+            @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có chương trình.</td></tr> }
+            </tbody>
+        </table>
+    </div></div></div>
+    <div class="col-lg-4"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Tạo chương trình</h6>
+        <form asp-action="Create" method="post">@Html.AntiForgeryToken()
+            <div class="mb-2"><input name="name" class="form-control" placeholder="Tên chương trình *" required /></div>
+            <div class="mb-2"><input name="code" class="form-control text-uppercase" placeholder="Mã (tự sinh)" /></div>
+            <div class="row g-2 mb-2">
+                <div class="col-6">
+                    <label class="form-label small text-muted">Khuyến mại theo</label>
+                    <select name="mainType" class="form-select form-select-sm">
+                        <option value="0">Đơn hàng</option>
+                        <option value="1">Sản phẩm</option>
+                        <option value="2">Sản phẩm &amp; đơn hàng</option>
+                    </select>
+                </div>
+                <div class="col-6">
+                    <label class="form-label small text-muted">Hình thức KM</label>
+                    <select name="prmType" class="form-select form-select-sm">
+                        <option value="0">Giảm giá đơn hàng</option>
+                        <option value="1">Giảm giá sản phẩm</option>
+                        <option value="2">Giảm giá SP theo tiền</option>
+                        <option value="3">Giảm giá SP theo số lượng</option>
+                        <option value="4">Tặng voucher</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row g-2 mb-2">
+                <div class="col-6"><label class="form-label small text-muted">Hiệu lực từ</label><input name="effDTimeStart" type="date" value="@DateTime.Today.ToString("yyyy-MM-dd")" class="form-control form-control-sm" /></div>
+                <div class="col-6"><label class="form-label small text-muted">Đến</label><input name="effDTimeEnd" type="date" value="@DateTime.Today.AddMonths(1).ToString("yyyy-MM-dd")" class="form-control form-control-sm" /></div>
+            </div>
+            <div class="mb-2"><input name="budgetVal" type="number" step="1000" class="form-control form-control-sm" placeholder="Ngân sách (đ)" /></div>
+            <div class="form-check mb-1"><input name="flagParallel" type="checkbox" value="true" class="form-check-input" id="parallel" /><label class="form-check-label small" for="parallel">Áp dụng đồng thời với chương trình khác</label></div>
+            <div class="form-check mb-2"><input name="flagMulti" type="checkbox" value="true" class="form-check-input" id="multi" /><label class="form-check-label small" for="multi">Nhân khuyến mại theo số lượng mua</label></div>
+            <div class="mb-3"><textarea name="remark" class="form-control form-control-sm" rows="2" placeholder="Ghi chú"></textarea></div>
+            <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Tạo</button>
+        </form>
+    </div></div></div>
+</div>

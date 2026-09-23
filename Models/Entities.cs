@@ -15,6 +15,18 @@ public enum VoucherProgramStatus { Pending = 0, Approved = 1, Finished = 2, Canc
 // Vòng đời chương trình khuyến mại mua xe mới — theo nguồn Prm_CarNew (PRMCNStatus).
 public enum CarPromotionStatus { Pending = 0, Approved = 1, Finished = 2, Cancelled = 3 }
 
+// Vòng đời chương trình khuyến mại chung — theo nguồn Prm_Promotion (PRMStatus).
+public enum PromotionStatus { Pending = 0, Approved = 1, Finished = 2, Cancelled = 3 }
+
+// "Khuyến mại theo" — theo nguồn Prm_Promotion.PRMMainType (PRMMainType).
+public enum PromotionMainType { Order = 0, Product = 1, ProductAndOrder = 2 }
+
+// "Hình thức khuyến mại" — theo nguồn Prm_Promotion.PRMPrdType (PromotionPrmType).
+public enum PromotionPrmType { Order = 0, Product = 1, ProductUPDc = 2, ProductUPDcByQty = 3, Voucher = 4 }
+
+// Loại điều kiện áp dụng (scope) — gom các bảng Prm_*Scope của nguồn về một bảng duy nhất.
+public enum PromotionScopeType { Date = 0, DayOfWeek = 1, Time = 2, Month = 3, Day = 4, Org = 5, User = 6, CustomerGroup = 7 }
+
 public class Org
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -188,4 +200,86 @@ public class CarPromotionDtl : IOrgOwned
     public string ModelCode { get; set; } = "";            // Model áp dụng
     public decimal PointVal { get; set; }                   // Giá trị khuyến mại cho model này
     public string? Remark { get; set; }
+}
+
+// Chương trình khuyến mại chung — port từ Prm_Promotion của hệ Loyalty.
+// Vòng đời: Chờ duyệt → Đã duyệt → Hoàn tất / Đã huỷ. Điều kiện áp dụng (tháng/ngày/thứ/giờ/chi nhánh/
+// người tạo/nhóm khách hàng) lưu ở PromotionScope; hình thức giảm giá ở PromotionPrm; điều kiện
+// số lượng/tiền hàng ở PromotionMain. Cờ FlagParallel cho phép áp dụng đồng thời với chương trình khác.
+public class PromotionProgram : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";                 // PRMCode — mã chương trình (người dùng nhập)
+    public string Name { get; set; } = "";                 // PRMName
+    public PromotionMainType MainType { get; set; } = PromotionMainType.Order;   // PRMMainType
+    public PromotionPrmType PrmType { get; set; } = PromotionPrmType.Order;      // PRMPrdType
+    public decimal BudgetVal { get; set; }                  // Ngân sách
+    public DateTime EffDTimeStart { get; set; } = DateTime.Today;
+    public DateTime EffDTimeEnd { get; set; } = DateTime.Today.AddMonths(1);
+    public bool FlagParallel { get; set; }                  // Được áp dụng đồng thời với chương trình khác
+    public bool FlagMulti { get; set; }                     // Nhân khuyến mại theo số lượng mua
+    public bool FlagAllOrg { get; set; } = true;            // Tất cả chi nhánh
+    public bool FlagAllUserCode { get; set; } = true;       // Tất cả người tạo
+    public bool FlagAllCustomerGrp { get; set; } = true;    // Tất cả nhóm khách hàng
+    public bool FlagAllMonth { get; set; } = true;          // Tất cả tháng
+    public bool FlagAllDay { get; set; } = true;            // Tất cả ngày
+    public bool FlagAllDayOfWeek { get; set; } = true;      // Tất cả thứ
+    public bool FlagAllTime { get; set; } = true;           // Tất cả giờ
+    public PromotionStatus Status { get; set; } = PromotionStatus.Pending;
+    public string? Remark { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public List<PromotionScope> Scopes { get; set; } = new();
+    public List<PromotionPrm> Prms { get; set; } = new();
+    public List<PromotionMain> Mains { get; set; } = new();
+
+    public bool IsLiveNow => Status == PromotionStatus.Finished && DateTime.Today >= EffDTimeStart.Date && DateTime.Today <= EffDTimeEnd.Date;
+}
+
+// Một dòng điều kiện áp dụng — gom Prm_DateScope/Prm_DayOfWeekScope/Prm_TimeScope/Prm_MonthScope/
+// Prm_DayScope/Prm_OrgScope/Prm_UserScope/Prm_CustomerGroupScope về một bảng có phân loại.
+public class PromotionScope : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int PromotionProgramId { get; set; }
+    public PromotionProgram? PromotionProgram { get; set; }
+    public PromotionScopeType ScopeType { get; set; }
+    public string Value { get; set; } = "";               // Ngày (yyyy-MM-dd) / Thứ (0-6) / Tháng (1-12) / Ngày (1-31) / Mã chi nhánh / UserCode / Nhóm KH
+    public string? ValueEnd { get; set; }                   // Giờ kết thúc (chỉ dùng cho ScopeType.Time, dạng HH:mm)
+    public bool Active { get; set; } = true;
+}
+
+// Hình thức khuyến mại — port từ Prm_PromotionPrm.
+// Giảm giá sản phẩm (UPDc/UPRateDc/UPDcMax) và/hoặc giảm giá đơn hàng (ValOrdDc/ValOrdRateDc/ValOrdDcMax).
+public class PromotionPrm : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int PromotionProgramId { get; set; }
+    public PromotionProgram? PromotionProgram { get; set; }
+    public int Idx { get; set; }                            // Thứ tự dòng
+    public int Qty { get; set; }                            // Số lượng áp dụng
+    public decimal UPDc { get; set; }                       // Giảm giá sản phẩm theo tiền
+    public decimal UPRateDc { get; set; }                   // Giảm giá sản phẩm theo %
+    public decimal UPDcMax { get; set; }                    // Mức giảm tối đa khi giảm theo %
+    public decimal ValOrdDc { get; set; }                   // Giảm giá đơn hàng theo tiền
+    public decimal ValOrdRateDc { get; set; }               // Giảm giá đơn hàng theo %
+    public decimal ValOrdDcMax { get; set; }                // Mức giảm tối đa khi giảm đơn hàng theo %
+    public bool FlagActive { get; set; } = true;
+    public string? Remark { get; set; }
+}
+
+// Điều kiện số lượng/tiền hàng — port từ Prm_PromotionMain.
+public class PromotionMain : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int PromotionProgramId { get; set; }
+    public PromotionProgram? PromotionProgram { get; set; }
+    public int Idx { get; set; }
+    public int Qty { get; set; }                            // Số lượng tối thiểu
+    public decimal Amount { get; set; }                     // Số tiền tối thiểu
+    public decimal TotalValOrd { get; set; }                // Tổng tiền hàng tối thiểu
+    public bool FlagActive { get; set; } = true;
 }

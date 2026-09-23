@@ -67,13 +67,34 @@ public static class Seeder
                 new CarPromotionDtl { CarPromotionId = cp.Id, ModelCode = "CRV", PointVal = 40_000_000 });
             await db.SaveChangesAsync();
         }
+
+        if (!await db.PromotionPrograms.AnyAsync())
+        {
+            var pp = new PromotionProgram
+            {
+                Code = "PRMKM2026", Name = "Khuyến mại cuối tuần 2026",
+                MainType = PromotionMainType.Order, PrmType = PromotionPrmType.Order,
+                BudgetVal = 500_000_000,
+                EffDTimeStart = DateTime.Today.AddDays(-3), EffDTimeEnd = DateTime.Today.AddMonths(2),
+                FlagParallel = false, FlagMulti = false,
+                FlagAllMonth = true, FlagAllDay = true, FlagAllDayOfWeek = false, FlagAllTime = true,
+                Status = PromotionStatus.Finished, Remark = "Giảm 10% đơn hàng (tối đa 200.000đ) vào Thứ Bảy & Chủ Nhật."
+            };
+            db.PromotionPrograms.Add(pp); await db.SaveChangesAsync();
+            db.PromotionScopes.AddRange(
+                new PromotionScope { PromotionProgramId = pp.Id, ScopeType = PromotionScopeType.DayOfWeek, Value = "6" },
+                new PromotionScope { PromotionProgramId = pp.Id, ScopeType = PromotionScopeType.DayOfWeek, Value = "0" });
+            db.PromotionPrms.Add(new PromotionPrm { PromotionProgramId = pp.Id, Idx = 1, ValOrdRateDc = 10, ValOrdDcMax = 200_000 });
+            db.PromotionMains.Add(new PromotionMain { PromotionProgramId = pp.Id, Idx = 1, TotalValOrd = 500_000 });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls" };
+        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains" };
         var sql = new List<string> {
             "CREATE TABLE IF NOT EXISTS minipromo.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON minipromo.\"Orgs\" (\"ApiKey\")" };

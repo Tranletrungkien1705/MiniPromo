@@ -1,0 +1,126 @@
+@model PromotionProgram
+@{ ViewData["Title"] = Model.Name; var (t, css) = Ui.Promotion(Model.Status); }
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card mb-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h5 class="fw-bold mb-1">@Model.Name <span class="badge bg-@css ms-1">@t</span></h5>
+                    <div class="text-muted small">Mã <b>@Model.Code</b> · @Ui.MainTypeText(Model.MainType) · @Ui.PrmTypeText(Model.PrmType) · @Model.EffDTimeStart.ToString("dd/MM/yyyy") – @Model.EffDTimeEnd.ToString("dd/MM/yyyy")</div>
+                    @if (!string.IsNullOrEmpty(Model.Remark)) { <div class="small mt-1">@Model.Remark</div> }
+                </div>
+                <div class="text-end">
+                    @if (Model.Status == PromotionStatus.Pending) { <form asp-action="Approve" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><button class="btn btn-sm btn-outline-primary">Duyệt</button></form> }
+                    else if (Model.Status == PromotionStatus.Approved) { <form asp-action="Finish" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><button class="btn btn-sm btn-success">Hoàn tất</button></form> }
+                    @if (Model.Status == PromotionStatus.Pending || Model.Status == PromotionStatus.Approved) { <form asp-action="Cancel" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><button class="btn btn-sm btn-outline-dark">Huỷ</button></form> }
+                </div>
+            </div>
+            <div class="row g-2 text-center mt-2">
+                <div class="col"><div class="text-muted small">Ngân sách</div><div class="fw-bold" style="color:#db2777">@Ui.Money(Model.BudgetVal)</div></div>
+                <div class="col"><div class="text-muted small">Đồng thời</div><div class="fw-bold">@(Model.FlagParallel ? "Có" : "Không")</div></div>
+                <div class="col"><div class="text-muted small">Nhân theo SL</div><div class="fw-bold">@(Model.FlagMulti ? "Có" : "Không")</div></div>
+            </div>
+        </div></div>
+
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-2">Điều kiện áp dụng</h6>
+            <table class="table table-sm align-middle">
+                <thead><tr><th>Loại</th><th>Giá trị</th><th>Đến</th><th>Trạng thái</th></tr></thead>
+                <tbody>
+                @foreach (var s in Model.Scopes)
+                {
+                    <tr><td class="fw-semibold small">@Ui.ScopeTypeText(s.ScopeType)</td><td>@s.Value</td><td class="small text-muted">@s.ValueEnd</td><td>@(s.Active ? "Bật" : "Tắt")</td></tr>
+                }
+                @if (Model.Scopes.Count == 0) { <tr><td colspan="4" class="text-center text-muted py-3">Không giới hạn theo điều kiện (áp dụng mọi thời điểm).</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-2">Hình thức khuyến mại</h6>
+            <table class="table table-sm align-middle">
+                <thead><tr><th>#</th><th class="text-end">SP theo tiền</th><th class="text-end">SP theo %</th><th class="text-end">Max %</th><th class="text-end">Đơn theo tiền</th><th class="text-end">Đơn theo %</th><th class="text-end">Max %</th></tr></thead>
+                <tbody>
+                @foreach (var x in Model.Prms)
+                {
+                    <tr><td class="small">@x.Idx</td><td class="text-end">@Ui.Money(x.UPDc)</td><td class="text-end">@x.UPRateDc%</td><td class="text-end">@Ui.Money(x.UPDcMax)</td><td class="text-end">@Ui.Money(x.ValOrdDc)</td><td class="text-end">@x.ValOrdRateDc%</td><td class="text-end">@Ui.Money(x.ValOrdDcMax)</td></tr>
+                }
+                @if (Model.Prms.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-3">Chưa có hình thức khuyến mại.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-2">Điều kiện số lượng / tiền hàng</h6>
+            <table class="table table-sm align-middle">
+                <thead><tr><th>#</th><th class="text-end">Số lượng</th><th class="text-end">Số tiền</th><th class="text-end">Tổng tiền hàng</th></tr></thead>
+                <tbody>
+                @foreach (var m in Model.Mains)
+                {
+                    <tr><td class="small">@m.Idx</td><td class="text-end">@m.Qty</td><td class="text-end">@Ui.Money(m.Amount)</td><td class="text-end">@Ui.Money(m.TotalValOrd)</td></tr>
+                }
+                @if (Model.Mains.Count == 0) { <tr><td colspan="4" class="text-center text-muted py-3">Không giới hạn số lượng/tiền hàng.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Thêm điều kiện áp dụng</h6>
+            <form asp-action="AddScope" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                <div class="mb-2">
+                    <select name="scopeType" class="form-select form-select-sm">
+                        <option value="0">Ngày (yyyy-MM-dd)</option>
+                        <option value="1">Thứ (0=CN..6=T7)</option>
+                        <option value="2">Giờ (HH:mm)</option>
+                        <option value="3">Tháng (1-12)</option>
+                        <option value="4">Ngày trong tháng (1-31)</option>
+                        <option value="5">Chi nhánh</option>
+                        <option value="6">Người tạo</option>
+                        <option value="7">Nhóm khách hàng</option>
+                    </select>
+                </div>
+                <div class="mb-2"><input name="value" class="form-control form-control-sm" placeholder="Giá trị *" required /></div>
+                <div class="mb-3"><input name="valueEnd" class="form-control form-control-sm" placeholder="Giá trị đến (chỉ cho Giờ)" /></div>
+                <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Thêm điều kiện</button>
+            </form>
+        </div></div>
+
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Thêm hình thức khuyến mại</h6>
+            <form asp-action="AddPrm" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><input name="idx" type="number" value="1" class="form-control form-control-sm" placeholder="Thứ tự" /></div>
+                    <div class="col-6"><input name="qty" type="number" value="1" class="form-control form-control-sm" placeholder="Số lượng" /></div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><input name="upDc" type="number" step="1000" class="form-control form-control-sm" placeholder="SP theo tiền" /></div>
+                    <div class="col-6"><input name="upRateDc" type="number" step="0.1" class="form-control form-control-sm" placeholder="SP theo %" /></div>
+                </div>
+                <div class="mb-2"><input name="upDcMax" type="number" step="1000" class="form-control form-control-sm" placeholder="Max % sản phẩm" /></div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><input name="valOrdDc" type="number" step="1000" class="form-control form-control-sm" placeholder="Đơn theo tiền" /></div>
+                    <div class="col-6"><input name="valOrdRateDc" type="number" step="0.1" class="form-control form-control-sm" placeholder="Đơn theo %" /></div>
+                </div>
+                <div class="mb-2"><input name="valOrdDcMax" type="number" step="1000" class="form-control form-control-sm" placeholder="Max % đơn hàng" /></div>
+                <div class="mb-3"><input name="remark" class="form-control form-control-sm" placeholder="Ghi chú" /></div>
+                <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Thêm hình thức</button>
+            </form>
+        </div></div>
+
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3">Thêm điều kiện số lượng/tiền hàng</h6>
+            <form asp-action="AddMain" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><input name="idx" type="number" value="1" class="form-control form-control-sm" placeholder="Thứ tự" /></div>
+                    <div class="col-6"><input name="qty" type="number" class="form-control form-control-sm" placeholder="Số lượng" /></div>
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-6"><input name="amount" type="number" step="1000" class="form-control form-control-sm" placeholder="Số tiền" /></div>
+                    <div class="col-6"><input name="totalValOrd" type="number" step="1000" class="form-control form-control-sm" placeholder="Tổng tiền hàng" /></div>
+                </div>
+                <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Thêm điều kiện</button>
+            </form>
+        </div></div>
+    </div>
+</div>

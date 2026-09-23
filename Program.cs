@@ -23,6 +23,7 @@ builder.Services.AddScoped<IPromoService, PromoService>();
 builder.Services.AddScoped<IVoucherService, VoucherService>();
 builder.Services.AddScoped<IVoucherProgramService, VoucherProgramService>();
 builder.Services.AddScoped<ICarPromotionService, CarPromotionService>();
+builder.Services.AddScoped<IPromotionProgramService, PromotionProgramService>();
 builder.Services.AddFleetObs();
 builder.Services.AddControllersWithViews();
 
@@ -83,6 +84,13 @@ app.MapPost("/api/car-promotion/calc", async (CarPromoCalcDto dto, ICarPromotion
     return Results.Ok(new { ok = r.ok, msg = r.msg, pointVal = r.pointVal, modelCode = r.modelCode });
 });
 
+// Tính khuyến mại cho một đơn hàng theo chương trình khuyến mại chung đang hiệu lực (công khai).
+app.MapPost("/api/promotion/calc", async (PromotionCalcDto dto, IPromotionProgramService svc) =>
+{
+    var r = await svc.CalcAsync(dto.OrderAmount, dto.Qty, dto.At);
+    return Results.Ok(new { ok = r.ok, msg = r.msg, productDiscount = r.productDiscount, orderDiscount = r.orderDiscount, totalDiscount = r.totalDiscount, programCode = r.programCode });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -131,6 +139,7 @@ record PlayDto(string? CampaignCode, string? Code, string? Name, string? Phone);
 record RedeemDto(string? Code, decimal? Amount, string? MemberNo);
 record VoucherCalcDto(string? ModelCode, DateTime? DeliveryDate, DateTime? RegistrationDate);
 record CarPromoCalcDto(string? DealerCode, string? ModelCode);
+record PromotionCalcDto(decimal OrderAmount, int Qty, DateTime? At);
 record RegisterOrgDto(string Name);
 record ImportCampaignDto(string? Code, string? Name, string? Description, DateTime? FromDate, DateTime? ToDate, int? Status, int LoseWeight, List<ImportPrizeDto>? Prizes, List<ImportEntryDto>? Entries);
 record ImportPrizeDto(string? Name, string? Tier, decimal Value, int Quantity, int Weight);

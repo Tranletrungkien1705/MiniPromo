@@ -12,7 +12,7 @@ namespace MiniPromo.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Produces("application/json")]
-public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, ICache cache, ITenantContext tenant) : ControllerBase
+public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICache cache, ITenantContext tenant) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard()
@@ -355,6 +355,122 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
         return o.ok ? Ok(new { ok = o.ok, msg = o.msg, pointVal = o.pointVal, modelCode = o.modelCode })
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
+
+    // ---- Chương trình khuyến mại chung (port từ Prm_Promotion) ----
+    [HttpGet("promotion-programs")]
+    public async Task<IActionResult> PromotionPrograms()
+        => Ok((await promotions.ProgramsAsync()).Select(p => new
+        {
+            p.Id, p.Code, p.Name, p.BudgetVal, p.EffDTimeStart, p.EffDTimeEnd,
+            mainType = (int)p.MainType, mainTypeText = Ui.MainTypeText(p.MainType),
+            prmType = (int)p.PrmType, prmTypeText = Ui.PrmTypeText(p.PrmType),
+            p.FlagParallel, p.FlagMulti,
+            status = (int)p.Status, statusText = Ui.Promotion(p.Status).text, statusCss = Ui.Promotion(p.Status).css,
+            live = p.IsLiveNow, scopes = p.Scopes.Count, prms = p.Prms.Count, mains = p.Mains.Count
+        }));
+
+    [HttpGet("promotion-programs/{id:int}")]
+    public async Task<IActionResult> PromotionProgram(int id)
+    {
+        var p = await promotions.GetProgramAsync(id);
+        if (p == null) return NotFound(new { error = "Không tìm thấy chương trình." });
+        return Ok(new
+        {
+            p.Id, p.Code, p.Name, p.BudgetVal, p.EffDTimeStart, p.EffDTimeEnd,
+            mainType = (int)p.MainType, mainTypeText = Ui.MainTypeText(p.MainType),
+            prmType = (int)p.PrmType, prmTypeText = Ui.PrmTypeText(p.PrmType),
+            p.FlagParallel, p.FlagMulti, p.FlagAllMonth, p.FlagAllDay, p.FlagAllDayOfWeek, p.FlagAllTime, p.Remark,
+            status = (int)p.Status, statusText = Ui.Promotion(p.Status).text, live = p.IsLiveNow,
+            scopes = p.Scopes.Select(s => new { s.Id, scopeType = (int)s.ScopeType, scopeTypeText = Ui.ScopeTypeText(s.ScopeType), s.Value, s.ValueEnd, s.Active }),
+            prms = p.Prms.Select(x => new { x.Id, x.Idx, x.Qty, x.UPDc, x.UPRateDc, x.UPDcMax, x.ValOrdDc, x.ValOrdRateDc, x.ValOrdDcMax, x.Remark }),
+            mains = p.Mains.Select(m => new { m.Id, m.Idx, m.Qty, m.Amount, m.TotalValOrd })
+        });
+    }
+
+    [HttpPost("promotion-programs")]
+    public async Task<IActionResult> CreatePromotionProgram([FromBody] PromotionProgramReq r)
+    {
+        var (ok, msg, id) = await promotions.CreateProgramAsync(new PromotionProgram
+        {
+            Code = r.Code ?? "", Name = r.Name, MainType = (PromotionMainType)r.MainType, PrmType = (PromotionPrmType)r.PrmType,
+            BudgetVal = r.BudgetVal,
+            EffDTimeStart = r.EffDTimeStart == default ? DateTime.Today : r.EffDTimeStart,
+            EffDTimeEnd = r.EffDTimeEnd == default ? DateTime.Today.AddMonths(1) : r.EffDTimeEnd,
+            FlagParallel = r.FlagParallel, FlagMulti = r.FlagMulti, Remark = r.Remark
+        });
+        return ok ? Ok(new { id }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("promotion-programs/{id:int}/scopes")]
+    public async Task<IActionResult> AddPromotionScope(int id, [FromBody] PromotionScopeReq r)
+    {
+        var (ok, msg) = await promotions.AddScopeAsync(new PromotionScope
+        {
+            PromotionProgramId = id, ScopeType = (PromotionScopeType)r.ScopeType, Value = r.Value ?? "", ValueEnd = r.ValueEnd
+        });
+        return ok ? Ok(new { ok }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("promotion-programs/{id:int}/prms")]
+    public async Task<IActionResult> AddPromotionPrm(int id, [FromBody] PromotionPrmReq r)
+    {
+        var (ok, msg) = await promotions.AddPrmAsync(new PromotionPrm
+        {
+            PromotionProgramId = id, Idx = r.Idx, Qty = r.Qty, UPDc = r.UPDc, UPRateDc = r.UPRateDc, UPDcMax = r.UPDcMax,
+            ValOrdDc = r.ValOrdDc, ValOrdRateDc = r.ValOrdRateDc, ValOrdDcMax = r.ValOrdDcMax, Remark = r.Remark
+        });
+        return ok ? Ok(new { ok }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("promotion-programs/{id:int}/mains")]
+    public async Task<IActionResult> AddPromotionMain(int id, [FromBody] PromotionMainReq r)
+    {
+        var (ok, msg) = await promotions.AddMainAsync(new PromotionMain
+        {
+            PromotionProgramId = id, Idx = r.Idx, Qty = r.Qty, Amount = r.Amount, TotalValOrd = r.TotalValOrd
+        });
+        return ok ? Ok(new { ok }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("promotion-programs/{id:int}/status")]
+    public async Task<IActionResult> SetPromotionProgramStatus(int id, [FromBody] StatusReq r)
+    {
+        var (ok, msg) = await promotions.SetStatusAsync(id, (PromotionStatus)r.Status);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Duyệt chương trình.
+    [HttpPost("promotion-programs/{id:int}/approve")]
+    public async Task<IActionResult> ApprovePromotionProgram(int id, [FromBody] RemarkReq? r)
+    {
+        var (ok, msg) = await promotions.ApproveAsync(id, r?.Remark);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Hoàn tất chương trình.
+    [HttpPost("promotion-programs/{id:int}/finish")]
+    public async Task<IActionResult> FinishPromotionProgram(int id, [FromBody] RemarkReq? r)
+    {
+        var (ok, msg) = await promotions.FinishAsync(id, r?.Remark);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Huỷ chương trình.
+    [HttpPost("promotion-programs/{id:int}/cancel")]
+    public async Task<IActionResult> CancelPromotionProgram(int id, [FromBody] RemarkReq? r)
+    {
+        var (ok, msg) = await promotions.CancelAsync(id, r?.Remark);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Tính khuyến mại cho một đơn hàng theo chương trình đang hiệu lực (công khai).
+    [HttpPost("promotion/calc")]
+    public async Task<IActionResult> CalcPromotion([FromBody] PromotionCalcReq r)
+    {
+        var o = await promotions.CalcAsync(r.OrderAmount, r.Qty, r.At);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, productDiscount = o.productDiscount, orderDiscount = o.orderDiscount, totalDiscount = o.totalDiscount, programCode = o.programCode })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
 }
 
 public record DashDto(int Campaigns, int Running, int TotalPlays, int TotalWins, decimal ValueAwarded, List<TopDto> Top);
@@ -376,3 +492,8 @@ public class RemarkReq { public string? Remark { get; set; } }
 public class CarPromotionReq { public string? Code { get; set; } public string Name { get; set; } = ""; public string? DealerCode { get; set; } public DateTime EffDateStart { get; set; } public DateTime EffDateEnd { get; set; } public bool FlagAllModel { get; set; } = true; public decimal PointValAllModel { get; set; } public string? Remark { get; set; } }
 public class CarPromotionDtlReq { public string? ModelCode { get; set; } public decimal PointVal { get; set; } public string? Remark { get; set; } }
 public class CarPromoCalcReq { public string? DealerCode { get; set; } public string? ModelCode { get; set; } }
+public class PromotionProgramReq { public string? Code { get; set; } public string Name { get; set; } = ""; public int MainType { get; set; } public int PrmType { get; set; } public decimal BudgetVal { get; set; } public DateTime EffDTimeStart { get; set; } public DateTime EffDTimeEnd { get; set; } public bool FlagParallel { get; set; } public bool FlagMulti { get; set; } public string? Remark { get; set; } }
+public class PromotionScopeReq { public int ScopeType { get; set; } public string? Value { get; set; } public string? ValueEnd { get; set; } }
+public class PromotionPrmReq { public int Idx { get; set; } public int Qty { get; set; } public decimal UPDc { get; set; } public decimal UPRateDc { get; set; } public decimal UPDcMax { get; set; } public decimal ValOrdDc { get; set; } public decimal ValOrdRateDc { get; set; } public decimal ValOrdDcMax { get; set; } public string? Remark { get; set; } }
+public class PromotionMainReq { public int Idx { get; set; } public int Qty { get; set; } public decimal Amount { get; set; } public decimal TotalValOrd { get; set; } }
+public class PromotionCalcReq { public decimal OrderAmount { get; set; } public int Qty { get; set; } public DateTime? At { get; set; } }

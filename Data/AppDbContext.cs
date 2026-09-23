@@ -18,6 +18,10 @@ public class AppDbContext : DbContext
     public DbSet<VoucherProgramDtl> VoucherProgramDtls => Set<VoucherProgramDtl>();
     public DbSet<CarPromotion> CarPromotions => Set<CarPromotion>();
     public DbSet<CarPromotionDtl> CarPromotionDtls => Set<CarPromotionDtl>();
+    public DbSet<PromotionProgram> PromotionPrograms => Set<PromotionProgram>();
+    public DbSet<PromotionScope> PromotionScopes => Set<PromotionScope>();
+    public DbSet<PromotionPrm> PromotionPrms => Set<PromotionPrm>();
+    public DbSet<PromotionMain> PromotionMains => Set<PromotionMain>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -88,6 +92,36 @@ public class AppDbContext : DbContext
         {
             e.Property(x => x.PointVal).HasPrecision(18, 2);
             e.HasOne(x => x.CarPromotion).WithMany(x => x.Details).HasForeignKey(x => x.CarPromotionId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PromotionProgram>(e =>
+        {
+            e.HasIndex(x => x.Code).IsUnique();           // Mã chương trình khuyến mại — duy nhất
+            e.Property(x => x.BudgetVal).HasPrecision(18, 2);
+            e.Ignore(x => x.IsLiveNow);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PromotionScope>(e =>
+        {
+            e.HasOne(x => x.PromotionProgram).WithMany(x => x.Scopes).HasForeignKey(x => x.PromotionProgramId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PromotionPrm>(e =>
+        {
+            e.Property(x => x.UPDc).HasPrecision(18, 2);
+            e.Property(x => x.UPRateDc).HasPrecision(18, 2);
+            e.Property(x => x.UPDcMax).HasPrecision(18, 2);
+            e.Property(x => x.ValOrdDc).HasPrecision(18, 2);
+            e.Property(x => x.ValOrdRateDc).HasPrecision(18, 2);
+            e.Property(x => x.ValOrdDcMax).HasPrecision(18, 2);
+            e.HasOne(x => x.PromotionProgram).WithMany(x => x.Prms).HasForeignKey(x => x.PromotionProgramId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PromotionMain>(e =>
+        {
+            e.Property(x => x.Amount).HasPrecision(18, 2);
+            e.Property(x => x.TotalValOrd).HasPrecision(18, 2);
+            e.HasOne(x => x.PromotionProgram).WithMany(x => x.Mains).HasForeignKey(x => x.PromotionProgramId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

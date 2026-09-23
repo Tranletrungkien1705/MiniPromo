@@ -261,3 +261,82 @@ public class CarPromotionController(ICarPromotionService svc) : Controller
         TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
     }
 }
+
+// Chương trình khuyến mại chung (port từ Prm_Promotion).
+public class PromotionProgramController(IPromotionProgramService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.ProgramsAsync());
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string name, string? code, PromotionMainType mainType, PromotionPrmType prmType,
+        decimal budgetVal, DateTime effDTimeStart, DateTime effDTimeEnd, bool flagParallel, bool flagMulti, string? remark)
+    {
+        var (ok, msg, id) = await svc.CreateProgramAsync(new PromotionProgram
+        {
+            Name = name ?? "", Code = (code ?? "").Trim().ToUpper(), MainType = mainType, PrmType = prmType,
+            BudgetVal = budgetVal,
+            EffDTimeStart = effDTimeStart == default ? DateTime.Today : effDTimeStart,
+            EffDTimeEnd = effDTimeEnd == default ? DateTime.Today.AddMonths(1) : effDTimeEnd,
+            FlagParallel = flagParallel, FlagMulti = flagMulti, Remark = remark
+        });
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Detail), new { id }) : RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var p = await svc.GetProgramAsync(id);
+        if (p == null) return NotFound();
+        return View(p);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddScope(int id, PromotionScopeType scopeType, string value, string? valueEnd)
+    {
+        var (ok, msg) = await svc.AddScopeAsync(new PromotionScope { PromotionProgramId = id, ScopeType = scopeType, Value = value ?? "", ValueEnd = valueEnd });
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddPrm(int id, int idx, int qty, decimal upDc, decimal upRateDc, decimal upDcMax,
+        decimal valOrdDc, decimal valOrdRateDc, decimal valOrdDcMax, string? remark)
+    {
+        var (ok, msg) = await svc.AddPrmAsync(new PromotionPrm
+        {
+            PromotionProgramId = id, Idx = idx, Qty = qty, UPDc = upDc, UPRateDc = upRateDc, UPDcMax = upDcMax,
+            ValOrdDc = valOrdDc, ValOrdRateDc = valOrdRateDc, ValOrdDcMax = valOrdDcMax, Remark = remark
+        });
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddMain(int id, int idx, int qty, decimal amount, decimal totalValOrd)
+    {
+        var (ok, msg) = await svc.AddMainAsync(new PromotionMain { PromotionProgramId = id, Idx = idx, Qty = qty, Amount = amount, TotalValOrd = totalValOrd });
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Duyệt chương trình.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Approve(int id, string? remark)
+    {
+        var (ok, msg) = await svc.ApproveAsync(id, remark);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Hoàn tất chương trình.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Finish(int id, string? remark)
+    {
+        var (ok, msg) = await svc.FinishAsync(id, remark);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Huỷ chương trình.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Cancel(int id, string? remark)
+    {
+        var (ok, msg) = await svc.CancelAsync(id, remark);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+}
