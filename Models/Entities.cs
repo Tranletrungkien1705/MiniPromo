@@ -913,4 +913,46 @@ public class VoucherIdSequence : IOrgOwned
     public string VerGen { get; set; } = "01";             // Phiên bản sinh mã
     public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
     public string? Remark { get; set; }
+}// Danh mục loại chi phí — port từ Mst_ExpenseType của hệ Loyalty.
+// Mỗi loại chi phí (ExpenseType) có tên hiển thị (ExpenseTypeName) và trạng thái áp dụng (FlagActive).
+// Được chính sách đối tượng tích điểm dịch vụ (PolicyExpenseType) tham chiếu tới.
+public class ExpenseType : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";                 // ExpenseType — mã loại chi phí
+    public string Name { get; set; } = "";                 // ExpenseTypeName — tên loại chi phí
+    public bool FlagActive { get; set; } = true;           // Trạng thái áp dụng
+    public string? Remark { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Chính sách đối tượng tích điểm dịch vụ — port từ Mst_PolicyExpenseType của hệ Loyalty.
+// Mỗi dòng gắn MỘT loại chi phí dịch vụ (ExpenseType) với quy tắc tích điểm:
+//  - FlagPoint: có tích điểm dịch vụ; FlagPointRank: có tích điểm để xét hạng;
+//  - AmountRate: tỷ lệ tích điểm (tiền dịch vụ → điểm);
+//  - MaxRankReviewPoint: điểm tối đa cho một lượt xét hạng; MaxAccumulationPoint: điểm tối đa tích luỹ;
+//  - FlagCountService: có tính lượt ghé thăm dịch vụ;
+//  - FlagDiscount: có chiết khấu dịch vụ; DiscountRate: tỉ lệ chiết khấu (0..100).
+// Ràng buộc (nguồn Mst_PolicyExpenseType_SaveX): loại chi phí phải tồn tại & đang hoạt động;
+// DiscountRate trong 0..100; nếu FlagDiscount = false thì DiscountRate phải = 0.
+// Lưu theo cơ chế "xoá sạch rồi ghi lại" (thay thế toàn bộ danh sách theo PolicyExpenseTypeNo).
+public class PolicyExpenseType : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string PolicyExpenseTypeNo { get; set; } = "";  // PolicyExpenseTypeNo — mã chính sách (nhóm dòng)
+    public string ExpenseType { get; set; } = "";          // ExpenseType — mã loại chi phí áp dụng
+    public string ExpenseTypeNameActual { get; set; } = ""; // ExpenseTypeNameActual — tên loại chi phí (nhập)
+    public bool FlagPoint { get; set; } = true;            // Có tích điểm dịch vụ
+    public bool FlagPointRank { get; set; }                // Có tích điểm để xét hạng
+    public decimal AmountRate { get; set; }                // Tỷ lệ tích điểm (tiền dịch vụ → điểm)
+    public decimal MaxRankReviewPoint { get; set; }        // Điểm tối đa cho một lượt xét hạng
+    public decimal MaxAccumulationPoint { get; set; }      // Điểm tối đa tích luỹ
+    public bool FlagCountService { get; set; }             // Có tính lượt ghé thăm dịch vụ
+    public bool FlagDiscount { get; set; }                 // Có chiết khấu dịch vụ
+    public decimal DiscountRate { get; set; }              // Tỉ lệ chiết khấu dịch vụ (0..100)
+    public bool FlagActive { get; set; } = true;           // Trạng thái áp dụng
+    public string? Remark { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

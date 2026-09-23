@@ -37,6 +37,7 @@ builder.Services.AddScoped<IPromotionTypeService, PromotionTypeService>();
 builder.Services.AddScoped<IDiscountCodeService, DiscountCodeService>();
 builder.Services.AddScoped<IVoucherIdService, VoucherIdService>();
 builder.Services.AddScoped<IIntroductionGrantService, IntroductionGrantService>();
+builder.Services.AddScoped<IPolicyExpenseTypeService, PolicyExpenseTypeService>();
 builder.Services.AddFleetObs();
 builder.Services.AddControllersWithViews();
 
@@ -241,6 +242,13 @@ app.MapPost("/api/introduction/grant", async (IntroductionGrantDto dto, IIntrodu
     return Results.Ok(new { ok = r.ok, msg = r.msg, memberNo = r.memberNo, newMemberNo = r.newMemberNo, point = r.point, amount = r.amount, pointExpiryDTime = r.pointExpiryDTime });
 });
 
+// Tra cứu quy tắc tích điểm dịch vụ cho một loại chi phí theo chính sách đang hoạt động (công khai).
+app.MapPost("/api/policy-expense-type/calc", async (ExpensePointCalcDto dto, IPolicyExpenseTypeService svc) =>
+{
+    var r = await svc.CalcAsync(dto.ExpenseType ?? "", dto.Amount);
+    return Results.Ok(new { ok = r.ok, msg = r.msg, expenseType = r.expenseType, expenseTypeName = r.expenseTypeName, amount = r.amount, point = r.point, discountRate = r.discountRate, countService = r.countService, pointRank = r.pointRank });
+});
+
 // Kiểm tra một hội viên có đủ điều kiện nhận voucher sinh nhật (công khai).
 app.MapPost("/api/birthday-voucher/check", async (BirthdayVoucherCheckDto dto, IBirthdayVoucherService svc) =>
 {
@@ -323,6 +331,7 @@ record DiscountApplyDto(string? Code, decimal OrderAmount, DateTime? At);
 record VoucherIdGenDto(int Amount, DateTime? At);
 record VoucherIdValidateDto(string? VoucherNo);
 record IntroductionGrantDto(string? NewMemberNo, string? ReferrerMemberNo, string? CardNo, string? CardTypeUse, string? CardTypeInit, string? DealerCode, decimal PointIntro, decimal ParamValue, DateTime? At);
+record ExpensePointCalcDto(string? ExpenseType, decimal Amount);
 record RegisterOrgDto(string Name);
 record ImportCampaignDto(string? Code, string? Name, string? Description, DateTime? FromDate, DateTime? ToDate, int? Status, int LoseWeight, List<ImportPrizeDto>? Prizes, List<ImportEntryDto>? Entries);
 record ImportPrizeDto(string? Name, string? Tier, decimal Value, int Quantity, int Weight);

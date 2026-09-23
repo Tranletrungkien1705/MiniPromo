@@ -51,6 +51,8 @@ public class AppDbContext : DbContext
     public DbSet<DealerDiscountMap> DealerDiscountMaps => Set<DealerDiscountMap>();
     public DbSet<VoucherIdSequence> VoucherIdSequences => Set<VoucherIdSequence>();
     public DbSet<IntroductionGrant> IntroductionGrants => Set<IntroductionGrant>();
+    public DbSet<ExpenseType> ExpenseTypes => Set<ExpenseType>();
+    public DbSet<PolicyExpenseType> PolicyExpenseTypes => Set<PolicyExpenseType>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -338,6 +340,20 @@ public class AppDbContext : DbContext
             e.Property(x => x.PointChTotal).HasPrecision(18, 2);
             e.Property(x => x.AmountChTotal).HasPrecision(18, 2);
             e.Property(x => x.ParamValue).HasPrecision(18, 2);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<ExpenseType>(e =>
+        {
+            e.HasIndex(x => x.Code).IsUnique();           // Mã loại chi phí — duy nhất
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PolicyExpenseType>(e =>
+        {
+            e.HasIndex(x => new { x.PolicyExpenseTypeNo, x.ExpenseType }).IsUnique();   // 1 chính sách + 1 loại chi phí
+            e.Property(x => x.AmountRate).HasPrecision(18, 2);
+            e.Property(x => x.MaxRankReviewPoint).HasPrecision(18, 2);
+            e.Property(x => x.MaxAccumulationPoint).HasPrecision(18, 2);
+            e.Property(x => x.DiscountRate).HasPrecision(18, 2);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

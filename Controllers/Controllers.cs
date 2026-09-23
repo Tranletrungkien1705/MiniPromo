@@ -1011,3 +1011,62 @@ public class IntroductionGrantController(IIntroductionGrantService svc) : Contro
         return View(await svc.ReconciliationAsync(memberNo));
     }
 }
+
+// Chính sách đối tượng tích điểm dịch vụ (port từ Mst_PolicyExpenseType + Mst_ExpenseType).
+public class PolicyExpenseTypeController(IPolicyExpenseTypeService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? policyNo)
+    {
+        ViewBag.PolicyNo = policyNo;
+        ViewBag.ExpenseTypes = await svc.ExpenseTypesAsync();
+        return View(await svc.PoliciesAsync(policyNo));
+    }
+
+    // Tạo loại chi phí (Mst_ExpenseType).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateExpenseType(string name, string? code, string? remark)
+    {
+        var (ok, msg, _) = await svc.CreateExpenseTypeAsync(new ExpenseType { Name = name ?? "", Code = (code ?? "").Trim().ToUpper(), Remark = remark });
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetExpenseTypeActive(int id, bool active)
+    {
+        var (ok, msg) = await svc.SetExpenseTypeActiveAsync(id, active);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Index));
+    }
+
+    // Lưu toàn bộ dòng của một chính sách (xoá sạch rồi ghi lại) — port từ Mst_PolicyExpenseType_SaveX.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(string policyExpenseTypeNo, string expenseType, string? expenseTypeNameActual,
+        bool flagPoint, bool flagPointRank, decimal amountRate, decimal maxRankReviewPoint, decimal maxAccumulationPoint,
+        bool flagCountService, bool flagDiscount, decimal discountRate, string? remark)
+    {
+        var rows = new List<PolicyExpenseType>
+        {
+            new()
+            {
+                ExpenseType = expenseType ?? "", ExpenseTypeNameActual = expenseTypeNameActual ?? "",
+                FlagPoint = flagPoint, FlagPointRank = flagPointRank, AmountRate = amountRate,
+                MaxRankReviewPoint = maxRankReviewPoint, MaxAccumulationPoint = maxAccumulationPoint,
+                FlagCountService = flagCountService, FlagDiscount = flagDiscount, DiscountRate = discountRate, Remark = remark
+            }
+        };
+        var (ok, msg, _) = await svc.SavePolicyAsync(policyExpenseTypeNo ?? "", rows);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index), new { policyNo = policyExpenseTypeNo });
+    }
+
+    // Tra cứu quy tắc tích điểm dịch vụ cho một loại chi phí.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Calc(string expenseType, decimal amount)
+    {
+        var o = await svc.CalcAsync(expenseType ?? "", amount);
+        TempData[o.ok ? "Success" : "Error"] = o.ok
+            ? $"Loại chi phí {o.expenseType}: {o.amount.ToString("N0")}đ → {o.point.ToString("N0")} điểm (chiết khấu {o.discountRate}%, tính lượt DV: {(o.countService ? "có" : "không")})."
+            : o.msg;
+        return RedirectToAction(nameof(Index));
+    }
+}

@@ -12,7 +12,7 @@ namespace MiniPromo.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Produces("application/json")]
-public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IBirthdayVoucherService birthdayVouchers, IIssueVoucherService issueVouchers, IParamPromotionService paramPromotions, IRankPolicyService rankPolicies, IPolicyMoneyToPointService moneyToPoints, IMemberDiscountService memberDiscounts, IPromotionTypeService promotionTypes, IDiscountCodeService discountCodes, IVoucherIdService voucherIds, IIntroductionGrantService introductionGrants, ICache cache, ITenantContext tenant) : ControllerBase
+public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IBirthdayVoucherService birthdayVouchers, IIssueVoucherService issueVouchers, IParamPromotionService paramPromotions, IRankPolicyService rankPolicies, IPolicyMoneyToPointService moneyToPoints, IMemberDiscountService memberDiscounts, IPromotionTypeService promotionTypes, IDiscountCodeService discountCodes, IVoucherIdService voucherIds, IIntroductionGrantService introductionGrants, IPolicyExpenseTypeService policyExpenseTypes, ICache cache, ITenantContext tenant) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard()
@@ -1372,6 +1372,61 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
         return o.ok ? Ok(new { ok = o.ok, msg = o.msg, memberNo = o.memberNo, newMemberNo = o.newMemberNo, point = o.point, amount = o.amount, pointExpiryDTime = o.pointExpiryDTime })
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
+
+    // ---- Chính sách đối tượng tích điểm dịch vụ (port từ Mst_PolicyExpenseType + Mst_ExpenseType) ----
+    [HttpGet("expense-types")]
+    public async Task<IActionResult> ExpenseTypes()
+        => Ok((await policyExpenseTypes.ExpenseTypesAsync()).Select(t => new
+        {
+            t.Id, t.Code, t.Name, t.FlagActive, activeText = t.FlagActive ? "Đang bật" : "Tạm dừng", t.Remark
+        }));
+
+    [HttpPost("expense-types")]
+    public async Task<IActionResult> CreateExpenseType([FromBody] ExpenseTypeReq r)
+    {
+        var (ok, msg, id) = await policyExpenseTypes.CreateExpenseTypeAsync(new ExpenseType { Code = r.Code ?? "", Name = r.Name, Remark = r.Remark });
+        return ok ? Ok(new { id }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("expense-types/{id:int}/active")]
+    public async Task<IActionResult> SetExpenseTypeActive(int id, [FromBody] ActiveReq r)
+    {
+        var (ok, msg) = await policyExpenseTypes.SetExpenseTypeActiveAsync(id, r.Active);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    [HttpGet("policy-expense-types")]
+    public async Task<IActionResult> PolicyExpenseTypes([FromQuery] string? policyNo)
+        => Ok((await policyExpenseTypes.PoliciesAsync(policyNo)).Select(p => new
+        {
+            p.Id, p.PolicyExpenseTypeNo, p.ExpenseType, p.ExpenseTypeNameActual,
+            p.FlagPoint, p.FlagPointRank, p.AmountRate, p.MaxRankReviewPoint, p.MaxAccumulationPoint,
+            p.FlagCountService, p.FlagDiscount, p.DiscountRate, p.FlagActive, p.Remark
+        }));
+
+    // Lưu toàn bộ dòng của một chính sách theo cơ chế "xoá sạch rồi ghi lại" (Mst_PolicyExpenseType_SaveX).
+    [HttpPost("policy-expense-types/save")]
+    public async Task<IActionResult> SavePolicyExpenseTypes([FromBody] PolicyExpenseTypeSaveReq r)
+    {
+        var rows = (r.Rows ?? new()).Select(x => new PolicyExpenseType
+        {
+            ExpenseType = x.ExpenseType ?? "", ExpenseTypeNameActual = x.ExpenseTypeNameActual ?? "",
+            FlagPoint = x.FlagPoint, FlagPointRank = x.FlagPointRank, AmountRate = x.AmountRate,
+            MaxRankReviewPoint = x.MaxRankReviewPoint, MaxAccumulationPoint = x.MaxAccumulationPoint,
+            FlagCountService = x.FlagCountService, FlagDiscount = x.FlagDiscount, DiscountRate = x.DiscountRate, Remark = x.Remark
+        }).ToList();
+        var (ok, msg, count) = await policyExpenseTypes.SavePolicyAsync(r.PolicyExpenseTypeNo ?? "", rows);
+        return ok ? Ok(new { ok, msg, count }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Tra cứu quy tắc tích điểm dịch vụ cho một loại chi phí (công khai).
+    [HttpPost("policy-expense-type/calc")]
+    public async Task<IActionResult> CalcPolicyExpenseType([FromBody] ExpensePointCalcReq r)
+    {
+        var o = await policyExpenseTypes.CalcAsync(r.ExpenseType ?? "", r.Amount);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, expenseType = o.expenseType, expenseTypeName = o.expenseTypeName, amount = o.amount, point = o.point, discountRate = o.discountRate, countService = o.countService, pointRank = o.pointRank })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
 }
 
 public record DashDto(int Campaigns, int Running, int TotalPlays, int TotalWins, decimal ValueAwarded, List<TopDto> Top);
@@ -1440,3 +1495,7 @@ public class MoneyToPointCalcReq { public string? CardType { get; set; } public 
 public class MemberDiscountLineReq { public decimal AmountForDC { get; set; } public decimal PaymentDiscountRate { get; set; } public bool FlagDiscount { get; set; } = true; }
 public class MemberDiscountCalcReq { public string? RefNo { get; set; } public string? CardTypeApply { get; set; } public DateTime? At { get; set; } public List<MemberDiscountLineReq>? Lines { get; set; } }
 public class MemberDiscountRecordReq { public string? RefNo { get; set; } public string? DealerCode { get; set; } public string? MemberNo { get; set; } public string? CardNo { get; set; } public string? CardTypeUse { get; set; } public string? CardTypeInit { get; set; } public string? CardTypeApply { get; set; } public DateTime? At { get; set; } public List<MemberDiscountLineReq>? Lines { get; set; } }
+public class ExpenseTypeReq { public string? Code { get; set; } public string Name { get; set; } = ""; public string? Remark { get; set; } }
+public class PolicyExpenseTypeRowReq { public string? ExpenseType { get; set; } public string? ExpenseTypeNameActual { get; set; } public bool FlagPoint { get; set; } = true; public bool FlagPointRank { get; set; } public decimal AmountRate { get; set; } public decimal MaxRankReviewPoint { get; set; } public decimal MaxAccumulationPoint { get; set; } public bool FlagCountService { get; set; } public bool FlagDiscount { get; set; } public decimal DiscountRate { get; set; } public string? Remark { get; set; } }
+public class PolicyExpenseTypeSaveReq { public string? PolicyExpenseTypeNo { get; set; } public List<PolicyExpenseTypeRowReq>? Rows { get; set; } }
+public class ExpensePointCalcReq { public string? ExpenseType { get; set; } public decimal Amount { get; set; } }

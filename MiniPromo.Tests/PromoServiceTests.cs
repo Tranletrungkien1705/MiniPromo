@@ -3081,3 +3081,194 @@ public class IntroductionGrantServiceTests
         }
     }
 }
+/// <summary>Test chính sách đối tượng tích điểm dịch vụ (Mst_PolicyExpenseType + Mst_ExpenseType):
+/// loại chi phí phải tồn tại & đang bật; DiscountRate 0..100; không chiết khấu thì tỉ lệ phải = 0;
+/// lưu theo cơ chế xoá sạch rồi ghi lại; tra cứu quy tắc tích điểm theo loại chi phí.</summary>
+public class PolicyExpenseTypeServiceTests
+{
+    private static (AppDbContext db, IPolicyExpenseTypeService svc, SqliteConnection conn) NewSvc()
+    {
+        var conn = new SqliteConnection("DataSource=:memory:"); conn.Open();
+        var opt = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conn).Options;
+        var db = new AppDbContext(opt, new TenantContext { OrgId = TenantContext.DefaultOrgId });
+        db.Database.EnsureCreated();
+        return (db, new PolicyExpenseTypeService(db), conn);
+    }
+
+    private static async Task SeedTypes(IPolicyExpenseTypeService svc)
+    {
+        await svc.CreateExpenseTypeAsync(new ExpenseType { Code = "DV001", Name = "Công dịch vụ" });
+        await svc.CreateExpenseTypeAsync(new ExpenseType { Code = "DV002", Name = "Phụ tùng" });
+    }
+
+    [Fact]
+    public async Task CreateExpenseType_RequiresName_And_DuplicateRejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var a = await svc.CreateExpenseTypeAsync(new ExpenseType { Code = "DV001", Name = "Công dịch vụ" });
+            Assert.True(a.ok);
+            var b = await svc.CreateExpenseTypeAsync(new ExpenseType { Code = "DV001", Name = "Trùng" });
+            Assert.False(b.ok);
+            var c = await svc.CreateExpenseTypeAsync(new ExpenseType { Code = "DV003", Name = "" });
+            Assert.False(c.ok);
+        }
+    }
+
+    [Fact]
+    public async Task SavePolicy_RequiresPolicyNo()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var o = await svc.SavePolicyAsync("", new List<PolicyExpenseType>());
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task SavePolicy_UnknownExpenseType_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SeedTypes(svc);
+            var o = await svc.SavePolicyAsync("PET", new List<PolicyExpenseType>
+            {
+                new() { ExpenseType = "ZZZ", AmountRate = 0.01m }
+            });
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task SavePolicy_InactiveExpenseType_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SeedTypes(svc);
+            var t = (await svc.ExpenseTypesAsync()).First(x => x.Code == "DV001");
+            await svc.SetExpenseTypeActiveAsync(t.Id, false);
+            var o = await svc.SavePolicyAsync("PET", new List<PolicyExpenseType>
+            {
+                new() { ExpenseType = "DV001", AmountRate = 0.01m }
+            });
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task SavePolicy_DiscountRateOutOfRange_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SeedTypes(svc);
+            var o = await svc.SavePolicyAsync("PET", new List<PolicyExpenseType>
+            {
+                new() { ExpenseType = "DV001", FlagDiscount = true, DiscountRate = 150 }
+            });
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task SavePolicy_NoDiscountButRateNonZero_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SeedTypes(svc);
+            var o = await svc.SavePolicyAsync("PET", new List<PolicyExpenseType>
+            {
+                new() { ExpenseType = "DV001", FlagDiscount = false, DiscountRate = 5 }
+            });
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task SavePolicy_DuplicateExpenseTypeInRows_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SeedTypes(svc);
+            var o = await svc.SavePolicyAsync("PET", new List<PolicyExpenseType>
+            {
+                new() { ExpenseType = "DV001" },
+                new() { ExpenseType = "DV001" }
+            });
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task SavePolicy_ReplacesAllRows_ForSamePolicyNo()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SeedTypes(svc);
+            await svc.SavePolicyAsync("PET", new List<PolicyExpenseType>
+            {
+                new() { ExpenseType = "DV001", AmountRate = 0.01m },
+                new() { ExpenseType = "DV002", AmountRate = 0.005m }
+            });
+            Assert.Equal(2, (await svc.RowsOfPolicyAsync("PET")).Count);
+
+            // Lưu lại chỉ 1 dòng → xoá sạch rồi ghi lại.
+            var o = await svc.SavePolicyAsync("PET", new List<PolicyExpenseType>
+            {
+                new() { ExpenseType = "DV002", AmountRate = 0.02m }
+            });
+            Assert.True(o.ok);
+            var rows = await svc.RowsOfPolicyAsync("PET");
+            Assert.Single(rows);
+            Assert.Equal("DV002", rows[0].ExpenseType);
+            Assert.Equal(0.02m, rows[0].AmountRate);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_UnknownExpenseType_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SeedTypes(svc);
+            var o = await svc.CalcAsync("ZZZ", 1_000_000);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_ComputesPoint_And_CapsAtMaxAccumulation()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SeedTypes(svc);
+            await svc.SavePolicyAsync("PET", new List<PolicyExpenseType>
+            {
+                new() { ExpenseType = "DV001", ExpenseTypeNameActual = "Công dịch vụ", FlagPoint = true, FlagPointRank = true,
+                    AmountRate = 0.01m, MaxAccumulationPoint = 5_000, FlagCountService = true, FlagDiscount = true, DiscountRate = 5 }
+            });
+
+            var o = await svc.CalcAsync("DV001", 1_000_000);
+            Assert.True(o.ok);
+            Assert.Equal(5_000, o.point);          // 1.000.000 × 1% = 10.000 → chặn ở mức tối đa 5.000
+            Assert.Equal(5, o.discountRate);
+            Assert.True(o.countService);
+            Assert.True(o.pointRank);
+        }
+    }
+
+    [Fact]
+    public async Task Calc_NoPointFlag_ReturnsZeroPoint()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await SeedTypes(svc);
+            await svc.SavePolicyAsync("PET", new List<PolicyExpenseType>
+            {
+                new() { ExpenseType = "DV002", FlagPoint = false, AmountRate = 0.01m }
+            });
+            var o = await svc.CalcAsync("DV002", 1_000_000);
+            Assert.True(o.ok);
+            Assert.Equal(0, o.point);
+        }
+    }
+}

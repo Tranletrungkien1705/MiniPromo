@@ -305,13 +305,43 @@ public static class Seeder
             });
             await db.SaveChangesAsync();
         }
+
+        if (!await db.ExpenseTypes.AnyAsync())
+        {
+            // Danh mục loại chi phí mẫu — theo nguồn Mst_ExpenseType.
+            db.ExpenseTypes.AddRange(
+                new ExpenseType { Code = "DV001", Name = "Công dịch vụ sửa chữa" },
+                new ExpenseType { Code = "DV002", Name = "Phụ tùng thay thế" });
+            await db.SaveChangesAsync();
+        }
+
+        if (!await db.PolicyExpenseTypes.AnyAsync())
+        {
+            // Chính sách đối tượng tích điểm dịch vụ mẫu — theo nguồn Mst_PolicyExpenseType.
+            db.PolicyExpenseTypes.AddRange(
+                new PolicyExpenseType
+                {
+                    PolicyExpenseTypeNo = "PET2026", ExpenseType = "DV001", ExpenseTypeNameActual = "Công dịch vụ sửa chữa",
+                    FlagPoint = true, FlagPointRank = true, AmountRate = 0.01m, MaxAccumulationPoint = 100_000,
+                    MaxRankReviewPoint = 5_000, FlagCountService = true, FlagDiscount = true, DiscountRate = 5,
+                    Remark = "Công dịch vụ: tích 1% giá trị, chiết khấu 5%."
+                },
+                new PolicyExpenseType
+                {
+                    PolicyExpenseTypeNo = "PET2026", ExpenseType = "DV002", ExpenseTypeNameActual = "Phụ tùng thay thế",
+                    FlagPoint = true, FlagPointRank = false, AmountRate = 0.005m, MaxAccumulationPoint = 50_000,
+                    MaxRankReviewPoint = 0, FlagCountService = false, FlagDiscount = false, DiscountRate = 0,
+                    Remark = "Phụ tùng: tích 0.5% giá trị, không chiết khấu."
+                });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "PromotionProductScopes", "CarRecommends", "CarRecommendDtls", "CardPromotionPrograms", "CardPromotionProgramDtls", "CardPromotionProgramSpecs", "CardPromotionUsages", "BirthdayPolicies", "BirthdayPolicyDtls", "BirthdayGrants", "BirthdayVouchers", "IssueVouchers", "IssueVoucherDtls", "IssueVoucherScopes", "IssueVoucherProducts", "IssueVoucherPrices", "RankPolicies", "PolicyMoneyToPoints", "PolicyMoneyToPointDtls", "MemberDiscountTransactions", "PromotionMainTypeDefs", "PromotionPrmTypeDefs", "PromotionPrmInMains", "DiscountCodes", "DealerDiscountMaps", "VoucherIdSequences", "IntroductionGrants" };
+        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "PromotionProductScopes", "CarRecommends", "CarRecommendDtls", "CardPromotionPrograms", "CardPromotionProgramDtls", "CardPromotionProgramSpecs", "CardPromotionUsages", "BirthdayPolicies", "BirthdayPolicyDtls", "BirthdayGrants", "BirthdayVouchers", "IssueVouchers", "IssueVoucherDtls", "IssueVoucherScopes", "IssueVoucherProducts", "IssueVoucherPrices", "RankPolicies", "PolicyMoneyToPoints", "PolicyMoneyToPointDtls", "MemberDiscountTransactions", "PromotionMainTypeDefs", "PromotionPrmTypeDefs", "PromotionPrmInMains", "DiscountCodes", "DealerDiscountMaps", "VoucherIdSequences", "IntroductionGrants", "ExpenseTypes", "PolicyExpenseTypes" };
         var sql = new List<string> {
             "CREATE TABLE IF NOT EXISTS minipromo.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON minipromo.\"Orgs\" (\"ApiKey\")" };
