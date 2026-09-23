@@ -29,6 +29,7 @@ builder.Services.AddScoped<ICardPromotionProgramService, CardPromotionProgramSer
 builder.Services.AddScoped<IBirthdayPolicyService, BirthdayPolicyService>();
 builder.Services.AddScoped<IIssueVoucherService, IssueVoucherService>();
 builder.Services.AddScoped<IParamPromotionService, ParamPromotionService>();
+builder.Services.AddScoped<IRankPolicyService, RankPolicyService>();
 builder.Services.AddFleetObs();
 builder.Services.AddControllersWithViews();
 
@@ -152,6 +153,13 @@ app.MapPost("/api/param-promotion/check", async (ParamWindowDto dto, IParamPromo
     return Results.Ok(new { ok = r.ok, msg = r.msg, programCode = r.programCode, start = r.start, end = r.end });
 });
 
+// Đánh giá xếp hạng thẻ theo chính sách đang bật (công khai).
+app.MapPost("/api/rank-policy/evaluate", async (RankEvalDto dto, IRankPolicyService svc) =>
+{
+    var r = await svc.EvaluateAsync(dto.CardType ?? "", dto.Point, dto.QtyVisit);
+    return Results.Ok(new { ok = r.ok, msg = r.msg, action = (int)r.action, cardType = r.cardType, value = r.value });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -207,6 +215,7 @@ record BirthdayCheckDto(string? MemberNo, string? CardType, DateTime? DateOfBirt
 record BirthdayGrantDto(string? MemberNo, string? CardNo, string? CardType, string? DealerCode, DateTime? DateOfBirth, DateTime? At);
 record IssueUseDto(string? VoucherNo, string? OrderNo, DateTime? At);
 record ParamWindowDto(string? ProgramCode, string? TypeCode, DateTime? Anchor);
+record RankEvalDto(string? CardType, decimal Point, int QtyVisit);
 record RegisterOrgDto(string Name);
 record ImportCampaignDto(string? Code, string? Name, string? Description, DateTime? FromDate, DateTime? ToDate, int? Status, int LoseWeight, List<ImportPrizeDto>? Prizes, List<ImportEntryDto>? Entries);
 record ImportPrizeDto(string? Name, string? Tier, decimal Value, int Quantity, int Weight);

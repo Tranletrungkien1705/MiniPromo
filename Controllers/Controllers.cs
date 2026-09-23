@@ -639,3 +639,48 @@ public class IssueVoucherController(IIssueVoucherService svc) : Controller
         return View(await svc.ReconciliationAsync(batchId));
     }
 }
+// Chính sách xếp hạng thẻ (port từ Mst_RankPolicy).
+public class RankPolicyController(IRankPolicyService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.PoliciesAsync());
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string cardType, string? code, int value,
+        decimal pointUpBegin, decimal pointUpEnd, int qtyVisitUpBegin, int qtyVisitUpEnd,
+        decimal pointKeepBegin, decimal pointKeepEnd, int qtyVisitKeepBegin, int qtyVisitKeepEnd,
+        int qtyMonth, string? remark)
+    {
+        var (ok, msg, id) = await svc.CreatePolicyAsync(new RankPolicy
+        {
+            CardType = cardType ?? "", Code = (code ?? "").Trim().ToUpper(), Value = value,
+            PointUpBegin = pointUpBegin, PointUpEnd = pointUpEnd, QtyVisitUpBegin = qtyVisitUpBegin, QtyVisitUpEnd = qtyVisitUpEnd,
+            PointKeepBegin = pointKeepBegin, PointKeepEnd = pointKeepEnd, QtyVisitKeepBegin = qtyVisitKeepBegin, QtyVisitKeepEnd = qtyVisitKeepEnd,
+            QtyMonth = qtyMonth <= 0 ? 12 : qtyMonth, Remark = remark
+        });
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Detail), new { id }) : RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var p = await svc.GetPolicyAsync(id);
+        if (p == null) return NotFound();
+        return View(p);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetStatus(int id, RankPolicyStatus status)
+    {
+        var (ok, msg) = await svc.SetStatusAsync(id, status);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Đánh giá xếp hạng thẻ theo chính sách đang bật (port từ Crd_CardRankPolicy_PerformX).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Evaluate(string cardType, decimal point, int qtyVisit)
+    {
+        var o = await svc.EvaluateAsync(cardType ?? "", point, qtyVisit);
+        TempData[o.ok ? "Success" : "Error"] = o.msg;
+        return RedirectToAction(nameof(Index));
+    }
+}

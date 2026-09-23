@@ -1,0 +1,72 @@
+@model List<RankPolicy>
+@{ ViewData["Title"] = "Xếp hạng thẻ"; }
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="fw-bold mb-0">Chính sách xếp hạng thẻ</h5>
+</div>
+<div class="row g-3">
+    <div class="col-lg-8"><div class="card"><div class="card-body">
+        <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>Mã</th><th>Hạng thẻ</th><th class="text-center">Bậc</th><th class="text-end">Điểm nâng</th><th class="text-end">Điểm duy trì</th><th class="text-center">Duy trì (tháng)</th><th>Trạng thái</th></tr></thead>
+            <tbody>
+            @foreach (var p in Model)
+            {
+                var (t, css) = Ui.RankPolicy(p.Status);
+                <tr style="cursor:pointer" onclick="location.href='/RankPolicy/Detail/@p.Id'">
+                    <td class="fw-semibold small">@p.Code</td>
+                    <td class="fw-semibold">@p.CardType</td>
+                    <td class="text-center">@p.Value</td>
+                    <td class="text-end small">@p.PointUpBegin.ToString("N0")</td>
+                    <td class="text-end small">@p.PointKeepBegin.ToString("N0")</td>
+                    <td class="text-center small">@p.QtyMonth</td>
+                    <td><span class="badge bg-@css">@t</span></td>
+                </tr>
+            }
+            @if (Model.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-4">Chưa có chính sách.</td></tr> }
+            </tbody>
+        </table>
+    </div></div></div>
+    <div class="col-lg-4">
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Tạo chính sách xếp hạng</h6>
+            <form asp-action="Create" method="post">@Html.AntiForgeryToken()
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><input name="cardType" class="form-control form-control-sm text-uppercase" placeholder="Hạng thẻ *" required /></div>
+                    <div class="col-6"><input name="code" class="form-control form-control-sm text-uppercase" placeholder="Mã (tự sinh)" /></div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><label class="form-label small text-muted">Bậc (Value)</label><input name="value" type="number" min="0" value="1" class="form-control form-control-sm" /></div>
+                    <div class="col-6"><label class="form-label small text-muted">Duy trì (tháng)</label><input name="qtyMonth" type="number" min="1" value="12" class="form-control form-control-sm" /></div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><label class="form-label small text-muted">Điểm nâng từ</label><input name="pointUpBegin" type="number" step="0.01" value="0" class="form-control form-control-sm" /></div>
+                    <div class="col-6"><label class="form-label small text-muted">Điểm nâng đến</label><input name="pointUpEnd" type="number" step="0.01" value="0" class="form-control form-control-sm" /></div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><label class="form-label small text-muted">Lượt nâng từ</label><input name="qtyVisitUpBegin" type="number" value="0" class="form-control form-control-sm" /></div>
+                    <div class="col-6"><label class="form-label small text-muted">Lượt nâng đến</label><input name="qtyVisitUpEnd" type="number" value="0" class="form-control form-control-sm" /></div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><label class="form-label small text-muted">Điểm duy trì từ</label><input name="pointKeepBegin" type="number" step="0.01" value="0" class="form-control form-control-sm" /></div>
+                    <div class="col-6"><label class="form-label small text-muted">Điểm duy trì đến</label><input name="pointKeepEnd" type="number" step="0.01" value="0" class="form-control form-control-sm" /></div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><label class="form-label small text-muted">Lượt duy trì từ</label><input name="qtyVisitKeepBegin" type="number" value="0" class="form-control form-control-sm" /></div>
+                    <div class="col-6"><label class="form-label small text-muted">Lượt duy trì đến</label><input name="qtyVisitKeepEnd" type="number" value="0" class="form-control form-control-sm" /></div>
+                </div>
+                <div class="mb-3"><textarea name="remark" class="form-control form-control-sm" rows="2" placeholder="Ghi chú"></textarea></div>
+                <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Tạo</button>
+            </form>
+        </div></div>
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3">Đánh giá xếp hạng</h6>
+            <form asp-action="Evaluate" method="post">@Html.AntiForgeryToken()
+                <div class="mb-2"><input name="cardType" class="form-control form-control-sm text-uppercase" placeholder="Hạng thẻ hiện tại *" required /></div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><input name="point" type="number" step="0.01" class="form-control form-control-sm" placeholder="Điểm tích luỹ" /></div>
+                    <div class="col-6"><input name="qtyVisit" type="number" class="form-control form-control-sm" placeholder="Số lần ghé" /></div>
+                </div>
+                <button class="btn btn-outline-primary w-100"><i class="bi bi-arrow-up-circle me-1"></i>Đánh giá</button>
+            </form>
+        </div></div>
+    </div>
+</div>

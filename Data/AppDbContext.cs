@@ -39,6 +39,7 @@ public class AppDbContext : DbContext
     public DbSet<IssueVoucherPrice> IssueVoucherPrices => Set<IssueVoucherPrice>();
     public DbSet<ParamPromotionType> ParamPromotionTypes => Set<ParamPromotionType>();
     public DbSet<ParamPromotion> ParamPromotions => Set<ParamPromotion>();
+    public DbSet<RankPolicy> RankPolicies => Set<RankPolicy>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -238,8 +239,17 @@ public class AppDbContext : DbContext
         b.Entity<ParamPromotion>(e =>
         {
             e.HasIndex(x => new { x.ProgramCode, x.ParamPromotionTypeId }).IsUnique();   // 1 chương trình + 1 loại áp dụng
-            e.Ignore(x => x.Window);
             e.HasOne(x => x.ParamPromotionType).WithMany(x => x.Params).HasForeignKey(x => x.ParamPromotionTypeId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<RankPolicy>(e =>
+        {
+            e.HasIndex(x => x.Code).IsUnique();           // Mã chính sách xếp hạng — duy nhất
+            e.Property(x => x.PointUpBegin).HasPrecision(18, 2);
+            e.Property(x => x.PointUpEnd).HasPrecision(18, 2);
+            e.Property(x => x.PointKeepBegin).HasPrecision(18, 2);
+            e.Property(x => x.PointKeepEnd).HasPrecision(18, 2);
+            e.Ignore(x => x.IsActive);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

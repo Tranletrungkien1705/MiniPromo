@@ -1876,4 +1876,137 @@ public class IssueVoucherServiceTests
             Assert.Equal(1, row.Evicted);   // VC002
         }
     }
+}/// <summary>Test chính sách xếp hạng thẻ: nâng hạng khi đủ ngưỡng, duy trì hạng, giữ nguyên, chặn trùng mã.</summary>
+public class RankPolicyServiceTests
+{
+    private static (AppDbContext db, IRankPolicyService svc, SqliteConnection conn) NewSvc()
+    {
+        var conn = new SqliteConnection("DataSource=:memory:"); conn.Open();
+        var opt = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conn).Options;
+        var db = new AppDbContext(opt, new TenantContext { OrgId = TenantContext.DefaultOrgId });
+        db.Database.EnsureCreated();
+        return (db, new RankPolicyService(db), conn);
+    }
+
+    // Tạo 3 hạng SILVER(1) < GOLD(2) < PLATINUM(3) đang bật.
+    private static async Task Seed3(IRankPolicyService svc)
+    {
+        await svc.CreatePolicyAsync(new RankPolicy { Code = "RP-S", CardType = "SILVER", Value = 1, PointUpBegin = 0, QtyVisitUpBegin = 0, PointKeepBegin = 0, QtyVisitKeepBegin = 0 });
+        await svc.CreatePolicyAsync(new RankPolicy { Code = "RP-G", CardType = "GOLD", Value = 2, PointUpBegin = 5_000, QtyVisitUpBegin = 5, PointKeepBegin = 2_000, QtyVisitKeepBegin = 3 });
+        await svc.CreatePolicyAsync(new RankPolicy { Code = "RP-P", CardType = "PLATINUM", Value = 3, PointUpBegin = 20_000, QtyVisitUpBegin = 20, PointKeepBegin = 10_000, QtyVisitKeepBegin = 10 });
+        foreach (var p in await svc.PoliciesAsync()) await svc.SetStatusAsync(p.Id, RankPolicyStatus.Active);
+    }
+
+    [Fact]
+    public async Task Create_RequiresCardType()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            Assert.False((await svc.CreatePolicyAsync(new RankPolicy { CardType = "" })).ok);
+        }
+    }
+
+    [Fact]
+    public async Task Create_DuplicateCode_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await svc.CreatePolicyAsync(new RankPolicy { Code = "A", CardType = "SILVER" });
+            var o = await svc.CreatePolicyAsync(new RankPolicy { Code = "A", CardType = "GOLD" });
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Evaluate_NoActivePolicy_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var o = await svc.EvaluateAsync("SILVER", 10_000, 10);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Evaluate_Up_WhenThresholdsMet()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await Seed3(svc);
+            // SILVER đủ ngưỡng nâng (điểm ≥ 0, lượt ≥ 0) → nâng lên hạng kế tiếp GOLD.
+            var o = await svc.EvaluateAsync("SILVER", 100, 1);
+            Assert.True(o.ok);
+            Assert.Equal(RankActionType.Up, o.action);
+            Assert.Equal("GOLD", o.cardType);
+            Assert.Equal(2, o.value);
+        }
+    }
+
+    [Fact]
+    public async Task Evaluate_Up_ToNextHigherOnly()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await Seed3(svc);
+            // GOLD đủ ngưỡng nâng → chỉ lên PLATINUM (hạng kế tiếp), không nhảy bậc.
+            var o = await svc.EvaluateAsync("GOLD", 25_000, 25);
+            Assert.Equal(RankActionType.Up, o.action);
+            Assert.Equal("PLATINUM", o.cardType);
+        }
+    }
+
+    [Fact]
+    public async Task Evaluate_Keep_WhenOnlyKeepThresholdMet()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await Seed3(svc);
+            // GOLD: điểm 3.000 < 5.000 (không nâng) nhưng ≥ 2.000 và lượt 3 ≥ 3 → duy trì.
+            var o = await svc.EvaluateAsync("GOLD", 3_000, 3);
+            Assert.True(o.ok);
+            Assert.Equal(RankActionType.Keep, o.action);
+            Assert.Equal("GOLD", o.cardType);
+        }
+    }
+
+    [Fact]
+    public async Task Evaluate_Keep_WhenBelowBoth()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await Seed3(svc);
+            // GOLD: điểm 100 < 2.000 và lượt 1 < 3 → giữ nguyên (Keep, không nâng).
+            var o = await svc.EvaluateAsync("GOLD", 100, 1);
+            Assert.True(o.ok);
+            Assert.Equal(RankActionType.Keep, o.action);
+            Assert.Equal("GOLD", o.cardType);
+        }
+    }
+
+    [Fact]
+    public async Task Evaluate_TopRank_NoUp()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await Seed3(svc);
+            // PLATINUM là hạng cao nhất → không có hạng cao hơn để nâng, chỉ duy trì.
+            var o = await svc.EvaluateAsync("PLATINUM", 100_000, 100);
+            Assert.True(o.ok);
+            Assert.Equal(RankActionType.Keep, o.action);
+            Assert.Equal("PLATINUM", o.cardType);
+        }
+    }
+
+    [Fact]
+    public async Task Evaluate_InactivePolicy_NotConsidered()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await Seed3(svc);
+            var silver = (await svc.PoliciesAsync()).First(p => p.CardType == "SILVER");
+            await svc.SetStatusAsync(silver.Id, RankPolicyStatus.Inactive);
+            var o = await svc.EvaluateAsync("SILVER", 100, 1);
+            Assert.False(o.ok);   // hạng hiện tại không còn chính sách đang bật
+        }
+    }
 }

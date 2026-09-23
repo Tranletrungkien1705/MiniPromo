@@ -12,7 +12,7 @@ namespace MiniPromo.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Produces("application/json")]
-public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IIssueVoucherService issueVouchers, IParamPromotionService paramPromotions, ICache cache, ITenantContext tenant) : ControllerBase
+public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IIssueVoucherService issueVouchers, IParamPromotionService paramPromotions, IRankPolicyService rankPolicies, ICache cache, ITenantContext tenant) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard()
@@ -874,7 +874,7 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
     public async Task<IActionResult> ParamPromotionTypes()
         => Ok((await paramPromotions.TypesAsync()).Select(t => new
         {
-            t.Id, t.Code, t.Name, t.FlagActive, activeText = t.FlagActive ? "Đang bật" : "Tạm dừng", t.Remark, params = t.Params.Count
+            t.Id, t.Code, t.Name, t.FlagActive, activeText = t.FlagActive ? "Đang bật" : "Tạm dừng", t.Remark, paramCount = t.Params.Count
         }));
 
     [HttpPost("param-promotion-types")]
@@ -939,6 +939,58 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
         return o.ok ? Ok(new { ok = o.ok, msg = o.msg, programCode = o.programCode, start = o.start, end = o.end })
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
+
+    // ---- Chính sách xếp hạng thẻ (port từ Mst_RankPolicy) ----
+    [HttpGet("rank-policies")]
+    public async Task<IActionResult> RankPolicies()
+        => Ok((await rankPolicies.PoliciesAsync()).Select(p => new
+        {
+            p.Id, p.Code, p.CardType, p.Value, p.PointUpBegin, p.PointUpEnd, p.QtyVisitUpBegin, p.QtyVisitUpEnd,
+            p.PointKeepBegin, p.PointKeepEnd, p.QtyVisitKeepBegin, p.QtyVisitKeepEnd, p.QtyMonth,
+            status = (int)p.Status, statusText = Ui.RankPolicy(p.Status).text, statusCss = Ui.RankPolicy(p.Status).css
+        }));
+
+    [HttpGet("rank-policies/{id:int}")]
+    public async Task<IActionResult> RankPolicy(int id)
+    {
+        var p = await rankPolicies.GetPolicyAsync(id);
+        if (p == null) return NotFound(new { error = "Không tìm thấy chính sách." });
+        return Ok(new
+        {
+            p.Id, p.Code, p.CardType, p.Value, p.PointUpBegin, p.PointUpEnd, p.QtyVisitUpBegin, p.QtyVisitUpEnd,
+            p.PointKeepBegin, p.PointKeepEnd, p.QtyVisitKeepBegin, p.QtyVisitKeepEnd, p.QtyMonth, p.Remark,
+            status = (int)p.Status, statusText = Ui.RankPolicy(p.Status).text
+        });
+    }
+
+    [HttpPost("rank-policies")]
+    public async Task<IActionResult> CreateRankPolicy([FromBody] RankPolicyReq r)
+    {
+        var (ok, msg, id) = await rankPolicies.CreatePolicyAsync(new RankPolicy
+        {
+            Code = r.Code ?? "", CardType = r.CardType ?? "", Value = r.Value,
+            PointUpBegin = r.PointUpBegin, PointUpEnd = r.PointUpEnd, QtyVisitUpBegin = r.QtyVisitUpBegin, QtyVisitUpEnd = r.QtyVisitUpEnd,
+            PointKeepBegin = r.PointKeepBegin, PointKeepEnd = r.PointKeepEnd, QtyVisitKeepBegin = r.QtyVisitKeepBegin, QtyVisitKeepEnd = r.QtyVisitKeepEnd,
+            QtyMonth = r.QtyMonth, Remark = r.Remark
+        });
+        return ok ? Ok(new { id }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("rank-policies/{id:int}/status")]
+    public async Task<IActionResult> SetRankPolicyStatus(int id, [FromBody] StatusReq r)
+    {
+        var (ok, msg) = await rankPolicies.SetStatusAsync(id, (RankPolicyStatus)r.Status);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Đánh giá xếp hạng thẻ theo chính sách đang bật (công khai).
+    [HttpPost("rank-policy/evaluate")]
+    public async Task<IActionResult> EvaluateRankPolicy([FromBody] RankEvalReq r)
+    {
+        var o = await rankPolicies.EvaluateAsync(r.CardType ?? "", r.Point, r.QtyVisit);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, action = (int)o.action, actionText = Ui.RankActionText(o.action), cardType = o.cardType, value = o.value })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
 }
 
 public record DashDto(int Campaigns, int Running, int TotalPlays, int TotalWins, decimal ValueAwarded, List<TopDto> Top);
@@ -987,3 +1039,5 @@ public class IssueUseReq { public string? VoucherNo { get; set; } public string?
 public class ParamPromotionTypeReq { public string? Code { get; set; } public string Name { get; set; } = ""; public string? Remark { get; set; } }
 public class ParamPromotionReq { public string? ProgramCode { get; set; } public string? ProgramName { get; set; } public int ParamPromotionTypeId { get; set; } public int QtyDateBefore { get; set; } public int QtyDateAfter { get; set; } public string? Remark { get; set; } }
 public class ParamWindowReq { public string? ProgramCode { get; set; } public string? TypeCode { get; set; } public DateTime? Anchor { get; set; } }
+public class RankPolicyReq { public string? Code { get; set; } public string? CardType { get; set; } public int Value { get; set; } public decimal PointUpBegin { get; set; } public decimal PointUpEnd { get; set; } public int QtyVisitUpBegin { get; set; } public int QtyVisitUpEnd { get; set; } public decimal PointKeepBegin { get; set; } public decimal PointKeepEnd { get; set; } public int QtyVisitKeepBegin { get; set; } public int QtyVisitKeepEnd { get; set; } public int QtyMonth { get; set; } = 12; public string? Remark { get; set; } }
+public class RankEvalReq { public string? CardType { get; set; } public decimal Point { get; set; } public int QtyVisit { get; set; } }

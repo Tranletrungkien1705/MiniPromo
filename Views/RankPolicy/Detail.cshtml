@@ -1,0 +1,44 @@
+@model RankPolicy
+@{ ViewData["Title"] = Model.CardType; var (t, css) = Ui.RankPolicy(Model.Status); }
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card mb-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h5 class="fw-bold mb-1">Hạng thẻ @Model.CardType <span class="badge bg-@css ms-1">@t</span></h5>
+                    <div class="text-muted small">Mã <b>@Model.Code</b> · Bậc <b>@Model.Value</b> · Duy trì @Model.QtyMonth tháng</div>
+                    @if (!string.IsNullOrEmpty(Model.Remark)) { <div class="small mt-1">@Model.Remark</div> }
+                </div>
+                <div class="text-end">
+                    @if (Model.Status == RankPolicyStatus.Inactive) { <form asp-action="SetStatus" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="status" value="1" /><button class="btn btn-sm btn-success">Bật</button></form> }
+                    else { <form asp-action="SetStatus" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="status" value="0" /><button class="btn btn-sm btn-outline-dark">Tạm dừng</button></form> }
+                </div>
+            </div>
+        </div></div>
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-2">Ngưỡng xếp hạng</h6>
+            <table class="table table-sm align-middle">
+                <thead><tr><th>Tiêu chí</th><th class="text-end">Từ</th><th class="text-end">Đến</th></tr></thead>
+                <tbody>
+                    <tr><td class="fw-semibold small">Điểm tích luỹ nâng hạng</td><td class="text-end">@Model.PointUpBegin.ToString("N0")</td><td class="text-end">@Model.PointUpEnd.ToString("N0")</td></tr>
+                    <tr><td class="fw-semibold small">Số lần ghé thăm nâng hạng</td><td class="text-end">@Model.QtyVisitUpBegin</td><td class="text-end">@Model.QtyVisitUpEnd</td></tr>
+                    <tr><td class="fw-semibold small">Điểm tích luỹ duy trì</td><td class="text-end">@Model.PointKeepBegin.ToString("N0")</td><td class="text-end">@Model.PointKeepEnd.ToString("N0")</td></tr>
+                    <tr><td class="fw-semibold small">Số lần ghé thăm duy trì</td><td class="text-end">@Model.QtyVisitKeepBegin</td><td class="text-end">@Model.QtyVisitKeepEnd</td></tr>
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3">Đánh giá xếp hạng</h6>
+            <form asp-action="Evaluate" method="post">@Html.AntiForgeryToken()
+                <div class="mb-2"><input name="cardType" class="form-control form-control-sm text-uppercase" value="@Model.CardType" required /></div>
+                <div class="row g-2 mb-3">
+                    <div class="col-6"><input name="point" type="number" step="0.01" class="form-control form-control-sm" placeholder="Điểm tích luỹ" /></div>
+                    <div class="col-6"><input name="qtyVisit" type="number" class="form-control form-control-sm" placeholder="Số lần ghé" /></div>
+                </div>
+                <button class="btn btn-outline-primary w-100"><i class="bi bi-arrow-up-circle me-1"></i>Đánh giá</button>
+            </form>
+        </div></div>
+    </div>
+</div>

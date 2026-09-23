@@ -173,4 +173,19 @@ public static class Ui
         IssuePriceType.Condition => "Điều kiện áp dụng",
         _ => t.ToString()
     };
+
+    public static (string text, string css) RankPolicy(RankPolicyStatus s) => s switch
+    {
+        RankPolicyStatus.Active   => ("Đang bật", "success"),
+        RankPolicyStatus.Inactive => ("Tạm dừng", "secondary"),
+        _ => (s.ToString(), "secondary")
+    };
+
+    public static string RankActionText(RankActionType a) => a switch
+    {
+        RankActionType.Up   => "Nâng hạng",
+        RankActionType.Keep => "Duy trì hạng",
+        RankActionType.Down => "Hạ hạng",
+        _ => a.ToString()
+    };
 }

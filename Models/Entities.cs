@@ -611,4 +611,36 @@ public class ParamPromotion : IOrgOwned
     // Khoảng ngày hiệu lực quanh một mốc tham chiếu (mốc − QtyDateBefore .. mốc + QtyDateAfter).
     public (DateTime start, DateTime end) Window(DateTime anchor) =>
         (anchor.Date.AddDays(-QtyDateBefore), anchor.Date.AddDays(QtyDateAfter));
+}// Trạng thái chính sách xếp hạng thẻ — theo nguồn Mst_RankPolicy.FlagActive.
+public enum RankPolicyStatus { Inactive = 0, Active = 1 }
+
+// Hành động xếp hạng của thẻ — theo nguồn RankActionType (Const.Main.cs).
+public enum RankActionType { Up = 0, Keep = 1, Down = 2 }
+
+// Chính sách xếp hạng thẻ — port từ Mst_RankPolicy của hệ Loyalty.
+// Mỗi dòng gắn một hạng thẻ (CardType) với một "bậc" (Value) và các ngưỡng tích luỹ để
+// NÂNG hạng (PointUpBegin/QtyVisitUpBegin) hoặc DUY TRÌ hạng (PointKeepBegin/QtyVisitKeepBegin)
+// trong khoảng thời gian duy trì QtyMonth tháng. Bậc cao hơn = Value lớn hơn.
+// Nguồn: Mst_RankPolicy + logic Crd_CardRankPolicy_PerformX / Mst_RankPolicy_GetUp trong CardRank.cs.
+public class RankPolicy : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";                 // RankPolicyCode — mã chính sách xếp hạng
+    public string CardType { get; set; } = "";             // Mã hạng thẻ áp dụng
+    public int Value { get; set; }                          // Bậc xếp hạng (số càng lớn hạng càng cao)
+    public decimal PointUpBegin { get; set; }               // Tích luỹ điểm nâng hạng từ
+    public decimal PointUpEnd { get; set; }                 // Tích luỹ điểm nâng hạng đến
+    public int QtyVisitUpBegin { get; set; }                // Số lần ghé thăm để nâng hạng từ
+    public int QtyVisitUpEnd { get; set; }                  // Số lần ghé thăm để nâng hạng đến
+    public decimal PointKeepBegin { get; set; }             // Tích luỹ điểm duy trì từ
+    public decimal PointKeepEnd { get; set; }               // Tích luỹ điểm duy trì đến
+    public int QtyVisitKeepBegin { get; set; }              // Số lần ghé thăm để duy trì từ
+    public int QtyVisitKeepEnd { get; set; }                // Số lần ghé thăm để duy trì đến
+    public int QtyMonth { get; set; } = 12;                 // Thời gian duy trì (tháng)
+    public RankPolicyStatus Status { get; set; } = RankPolicyStatus.Inactive;
+    public string? Remark { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public bool IsActive => Status == RankPolicyStatus.Active;
 }
