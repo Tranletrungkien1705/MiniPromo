@@ -28,6 +28,7 @@ builder.Services.AddScoped<ICarRecommendService, CarRecommendService>();
 builder.Services.AddScoped<ICardPromotionProgramService, CardPromotionProgramService>();
 builder.Services.AddScoped<IBirthdayPolicyService, BirthdayPolicyService>();
 builder.Services.AddScoped<IIssueVoucherService, IssueVoucherService>();
+builder.Services.AddScoped<IParamPromotionService, ParamPromotionService>();
 builder.Services.AddFleetObs();
 builder.Services.AddControllersWithViews();
 
@@ -144,6 +145,13 @@ app.MapPost("/api/issue-voucher/use", async (IssueUseDto dto, IIssueVoucherServi
     return Results.Ok(new { ok = r.ok, msg = r.msg, voucherNo = r.voucherNo, favorType = r.favorType });
 });
 
+// Kiểm tra một mốc ngày có nằm trong khoảng áp dụng của tham số khuyến mại (công khai).
+app.MapPost("/api/param-promotion/check", async (ParamWindowDto dto, IParamPromotionService svc) =>
+{
+    var r = await svc.CheckWindowAsync(dto.ProgramCode ?? "", dto.TypeCode ?? "", dto.Anchor ?? DateTime.Today);
+    return Results.Ok(new { ok = r.ok, msg = r.msg, programCode = r.programCode, start = r.start, end = r.end });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -198,6 +206,7 @@ record CardPromotionUseDto(string? DealNo, string? DealerCode, string? CardNo, s
 record BirthdayCheckDto(string? MemberNo, string? CardType, DateTime? DateOfBirth, DateTime? At);
 record BirthdayGrantDto(string? MemberNo, string? CardNo, string? CardType, string? DealerCode, DateTime? DateOfBirth, DateTime? At);
 record IssueUseDto(string? VoucherNo, string? OrderNo, DateTime? At);
+record ParamWindowDto(string? ProgramCode, string? TypeCode, DateTime? Anchor);
 record RegisterOrgDto(string Name);
 record ImportCampaignDto(string? Code, string? Name, string? Description, DateTime? FromDate, DateTime? ToDate, int? Status, int LoseWeight, List<ImportPrizeDto>? Prizes, List<ImportEntryDto>? Entries);
 record ImportPrizeDto(string? Name, string? Tier, decimal Value, int Quantity, int Weight);

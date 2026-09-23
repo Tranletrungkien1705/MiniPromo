@@ -576,3 +576,39 @@ public class IssueVoucherPrice : IOrgOwned
     public decimal UPDcMax { get; set; }                    // Mức giảm tối đa
     public string? Remark { get; set; }
 }
+// Loại áp dụng của tham số khuyến mại — theo nguồn Mst_ParamPromotionType.ParamPrType.
+// Mỗi loại gắn một tên hiển thị (ParamPrTypeName) và dùng để phân nhóm tham số theo nghiệp vụ.
+public class ParamPromotionType : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";                 // ParamPrType — mã loại áp dụng
+    public string Name { get; set; } = "";                 // ParamPrTypeName — tên loại áp dụng
+    public bool FlagActive { get; set; } = true;           // Trạng thái áp dụng
+    public string? Remark { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public List<ParamPromotion> Params { get; set; } = new();
+}
+
+// Tham số khuyến mại — port từ Mst_ParamPromotion của hệ Loyalty.
+// Mỗi tham số gắn một chương trình (PrProgramCode) với một loại áp dụng (ParamPrType) và một
+// khoảng ngày tương đối: QtyDateBefore ngày trước và QtyDateAfter ngày sau một mốc ngày tham chiếu.
+// Dùng để xác định khoảng ngày hiệu lực của chương trình quanh một mốc (ví dụ ngày sinh, ngày giao xe).
+public class ParamPromotion : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string ProgramCode { get; set; } = "";          // PrProgramCode — mã chương trình
+    public string ProgramName { get; set; } = "";          // PrProgramName — tên chương trình
+    public int ParamPromotionTypeId { get; set; }          // Loại áp dụng (ParamPrType)
+    public ParamPromotionType? ParamPromotionType { get; set; }
+    public int QtyDateBefore { get; set; }                  // Số ngày trước mốc tham chiếu
+    public int QtyDateAfter { get; set; }                   // Số ngày sau mốc tham chiếu
+    public bool FlagActive { get; set; } = true;           // Trạng thái áp dụng
+    public string? Remark { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    // Khoảng ngày hiệu lực quanh một mốc tham chiếu (mốc − QtyDateBefore .. mốc + QtyDateAfter).
+    public (DateTime start, DateTime end) Window(DateTime anchor) =>
+        (anchor.Date.AddDays(-QtyDateBefore), anchor.Date.AddDays(QtyDateAfter));
+}

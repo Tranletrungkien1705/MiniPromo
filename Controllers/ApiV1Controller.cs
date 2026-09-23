@@ -12,7 +12,7 @@ namespace MiniPromo.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Produces("application/json")]
-public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IIssueVoucherService issueVouchers, ICache cache, ITenantContext tenant) : ControllerBase
+public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IIssueVoucherService issueVouchers, IParamPromotionService paramPromotions, ICache cache, ITenantContext tenant) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard()
@@ -868,6 +868,77 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
         return o.ok ? Ok(new { ok = o.ok, msg = o.msg, voucherNo = o.voucherNo, favorType = o.favorType })
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
+
+    // ---- Tham số khuyến mại (port từ Mst_ParamPromotion + Mst_ParamPromotionType) ----
+    [HttpGet("param-promotion-types")]
+    public async Task<IActionResult> ParamPromotionTypes()
+        => Ok((await paramPromotions.TypesAsync()).Select(t => new
+        {
+            t.Id, t.Code, t.Name, t.FlagActive, activeText = t.FlagActive ? "Đang bật" : "Tạm dừng", t.Remark, params = t.Params.Count
+        }));
+
+    [HttpPost("param-promotion-types")]
+    public async Task<IActionResult> CreateParamPromotionType([FromBody] ParamPromotionTypeReq r)
+    {
+        var (ok, msg, id) = await paramPromotions.CreateTypeAsync(new ParamPromotionType { Code = r.Code ?? "", Name = r.Name, Remark = r.Remark });
+        return ok ? Ok(new { id }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("param-promotion-types/{id:int}/active")]
+    public async Task<IActionResult> SetParamPromotionTypeActive(int id, [FromBody] ActiveReq r)
+    {
+        var (ok, msg) = await paramPromotions.SetTypeActiveAsync(id, r.Active);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    [HttpGet("param-promotions")]
+    public async Task<IActionResult> ParamPromotions()
+        => Ok((await paramPromotions.ParamsAsync()).Select(p => new
+        {
+            p.Id, p.ProgramCode, p.ProgramName, p.ParamPromotionTypeId,
+            typeCode = p.ParamPromotionType?.Code, typeName = p.ParamPromotionType?.Name,
+            p.QtyDateBefore, p.QtyDateAfter, p.FlagActive, activeText = p.FlagActive ? "Đang bật" : "Tạm dừng", p.Remark
+        }));
+
+    [HttpGet("param-promotions/{id:int}")]
+    public async Task<IActionResult> ParamPromotion(int id)
+    {
+        var p = await paramPromotions.GetParamAsync(id);
+        if (p == null) return NotFound(new { error = "Không tìm thấy tham số khuyến mại." });
+        return Ok(new
+        {
+            p.Id, p.ProgramCode, p.ProgramName, p.ParamPromotionTypeId,
+            typeCode = p.ParamPromotionType?.Code, typeName = p.ParamPromotionType?.Name,
+            p.QtyDateBefore, p.QtyDateAfter, p.FlagActive, p.Remark
+        });
+    }
+
+    [HttpPost("param-promotions")]
+    public async Task<IActionResult> CreateParamPromotion([FromBody] ParamPromotionReq r)
+    {
+        var (ok, msg, id) = await paramPromotions.CreateParamAsync(new ParamPromotion
+        {
+            ProgramCode = r.ProgramCode ?? "", ProgramName = r.ProgramName ?? "",
+            ParamPromotionTypeId = r.ParamPromotionTypeId, QtyDateBefore = r.QtyDateBefore, QtyDateAfter = r.QtyDateAfter, Remark = r.Remark
+        });
+        return ok ? Ok(new { id }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("param-promotions/{id:int}/active")]
+    public async Task<IActionResult> SetParamPromotionActive(int id, [FromBody] ActiveReq r)
+    {
+        var (ok, msg) = await paramPromotions.SetParamActiveAsync(id, r.Active);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Kiểm tra một mốc ngày có nằm trong khoảng áp dụng của tham số khuyến mại (công khai).
+    [HttpPost("param-promotion/check")]
+    public async Task<IActionResult> CheckParamPromotion([FromBody] ParamWindowReq r)
+    {
+        var o = await paramPromotions.CheckWindowAsync(r.ProgramCode ?? "", r.TypeCode ?? "", r.Anchor ?? DateTime.Today);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, programCode = o.programCode, start = o.start, end = o.end })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
 }
 
 public record DashDto(int Campaigns, int Running, int TotalPlays, int TotalWins, decimal ValueAwarded, List<TopDto> Top);
@@ -913,3 +984,6 @@ public class IssueVoucherProductReq { public int RefType { get; set; } public st
 public class IssueVoucherPriceReq { public int IssueType { get; set; } public string? IssueTypeDtl { get; set; } public decimal UPDc { get; set; } public decimal UPRateDc { get; set; } public decimal UPDcMax { get; set; } public string? Remark { get; set; } }
 public class IssueVoucherIssueReq { public string? VoucherNo { get; set; } public string? Receiver { get; set; } public DateTime? At { get; set; } }
 public class IssueUseReq { public string? VoucherNo { get; set; } public string? OrderNo { get; set; } public DateTime? At { get; set; } }
+public class ParamPromotionTypeReq { public string? Code { get; set; } public string Name { get; set; } = ""; public string? Remark { get; set; } }
+public class ParamPromotionReq { public string? ProgramCode { get; set; } public string? ProgramName { get; set; } public int ParamPromotionTypeId { get; set; } public int QtyDateBefore { get; set; } public int QtyDateAfter { get; set; } public string? Remark { get; set; } }
+public class ParamWindowReq { public string? ProgramCode { get; set; } public string? TypeCode { get; set; } public DateTime? Anchor { get; set; } }
