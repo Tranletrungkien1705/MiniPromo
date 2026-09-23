@@ -546,6 +546,39 @@ public class BirthdayPolicyController(IBirthdayPolicyService svc) : Controller
     }
 }
 
+// Voucher sinh nhật (port từ Crd_MemberVoucher, nâng cấp 20260518).
+public class BirthdayVoucherController(IBirthdayVoucherService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? memberNo)
+    {
+        ViewBag.MemberNo = memberNo;
+        return View(await svc.VouchersAsync(memberNo));
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var v = await svc.GetVoucherAsync(id);
+        if (v == null) return NotFound();
+        return View(v);
+    }
+
+    // Phát voucher sinh nhật cho một hội viên (port từ Crd_Member_PerformVCBirhday).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Issue(string memberNo, string? cardNo, string cardType, DateTime? dateOfBirth, DateTime? at)
+    {
+        var o = await svc.IssueAsync(memberNo ?? "", cardNo ?? "", cardType ?? "", dateOfBirth, at);
+        TempData[o.ok ? "Success" : "Error"] = o.msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Đối soát voucher sinh nhật đã phát theo chương trình + loại thẻ.
+    public async Task<IActionResult> Reconciliation(int? policyId)
+    {
+        ViewBag.PolicyId = policyId;
+        return View(await svc.ReconciliationAsync(policyId));
+    }
+}
+
 // Đợt phát hành voucher (port từ Mst_IssueVoucher).
 public class IssueVoucherController(IIssueVoucherService svc) : Controller
 {

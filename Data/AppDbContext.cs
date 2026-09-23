@@ -32,6 +32,7 @@ public class AppDbContext : DbContext
     public DbSet<BirthdayPolicy> BirthdayPolicies => Set<BirthdayPolicy>();
     public DbSet<BirthdayPolicyDtl> BirthdayPolicyDtls => Set<BirthdayPolicyDtl>();
     public DbSet<BirthdayGrant> BirthdayGrants => Set<BirthdayGrant>();
+    public DbSet<BirthdayVoucher> BirthdayVouchers => Set<BirthdayVoucher>();
     public DbSet<IssueVoucher> IssueVouchers => Set<IssueVoucher>();
     public DbSet<IssueVoucherDtl> IssueVoucherDtls => Set<IssueVoucherDtl>();
     public DbSet<IssueVoucherScope> IssueVoucherScopes => Set<IssueVoucherScope>();
@@ -201,6 +202,7 @@ public class AppDbContext : DbContext
         b.Entity<BirthdayPolicyDtl>(e =>
         {
             e.Property(x => x.Point).HasPrecision(18, 2);
+            e.Property(x => x.VoucherValue).HasPrecision(18, 2);
             e.HasOne(x => x.BirthdayPolicy).WithMany(x => x.Details).HasForeignKey(x => x.BirthdayPolicyId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
@@ -208,6 +210,17 @@ public class AppDbContext : DbContext
         {
             e.Property(x => x.Point).HasPrecision(18, 2);
             e.Property(x => x.Amount).HasPrecision(18, 2);
+            e.HasOne(x => x.BirthdayPolicy).WithMany().HasForeignKey(x => x.BirthdayPolicyId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<BirthdayVoucher>(e =>
+        {
+            e.HasIndex(x => x.VoucherNo).IsUnique();      // Mã voucher sinh nhật — duy nhất (idempotent theo năm)
+            e.Property(x => x.PointVCTotal).HasPrecision(18, 2);
+            e.Property(x => x.PointVCRemain).HasPrecision(18, 2);
+            e.Property(x => x.PointVCLimit).HasPrecision(18, 2);
+            e.Ignore(x => x.IsExpired);
+            e.Ignore(x => x.IsUsable);
             e.HasOne(x => x.BirthdayPolicy).WithMany().HasForeignKey(x => x.BirthdayPolicyId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });

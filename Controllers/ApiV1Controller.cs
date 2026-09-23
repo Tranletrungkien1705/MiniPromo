@@ -12,7 +12,7 @@ namespace MiniPromo.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Produces("application/json")]
-public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IIssueVoucherService issueVouchers, IParamPromotionService paramPromotions, IRankPolicyService rankPolicies, IPolicyMoneyToPointService moneyToPoints, IMemberDiscountService memberDiscounts, IPromotionTypeService promotionTypes, IDiscountCodeService discountCodes, IVoucherIdService voucherIds, IIntroductionGrantService introductionGrants, ICache cache, ITenantContext tenant) : ControllerBase
+public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IBirthdayVoucherService birthdayVouchers, IIssueVoucherService issueVouchers, IParamPromotionService paramPromotions, IRankPolicyService rankPolicies, IPolicyMoneyToPointService moneyToPoints, IMemberDiscountService memberDiscounts, IPromotionTypeService promotionTypes, IDiscountCodeService discountCodes, IVoucherIdService voucherIds, IIntroductionGrantService introductionGrants, ICache cache, ITenantContext tenant) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard()
@@ -741,6 +741,55 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
 
+    // ---- Voucher sinh nhật (port từ Crd_MemberVoucher, nâng cấp 20260518) ----
+    [HttpGet("birthday-vouchers")]
+    public async Task<IActionResult> BirthdayVouchers([FromQuery] string? memberNo)
+        => Ok((await birthdayVouchers.VouchersAsync(memberNo)).Select(v => new
+        {
+            v.Id, v.VoucherNo, v.RefNo, v.MemberNo, v.CardNo, v.CardTypeUse, v.CardTypeInit, v.DealerCode,
+            v.PointVCTotal, v.PointVCRemain, v.PointVCLimit, v.QtyUseVCLimit, v.QtyUseVCRemain,
+            v.PointExpiryDate, v.CreateDate, expired = v.IsExpired, usable = v.IsUsable
+        }));
+
+    [HttpGet("birthday-vouchers/{id:int}")]
+    public async Task<IActionResult> BirthdayVoucher(int id)
+    {
+        var v = await birthdayVouchers.GetVoucherAsync(id);
+        if (v == null) return NotFound(new { error = "Không tìm thấy voucher sinh nhật." });
+        return Ok(new
+        {
+            v.Id, v.VoucherNo, v.RefNo, v.MemberNo, v.CardNo, v.CardTypeUse, v.CardTypeInit, v.DealerCode,
+            v.PointVCTotal, v.PointVCRemain, v.PointVCLimit, v.QtyUseVCLimit, v.QtyUseVCRemain,
+            v.PointExpiryDate, v.CreateDate, v.Remark, expired = v.IsExpired, usable = v.IsUsable
+        });
+    }
+
+    // Đối soát voucher sinh nhật đã phát theo chương trình + loại thẻ.
+    [HttpGet("birthday-vouchers/reconciliation")]
+    public async Task<IActionResult> BirthdayVoucherReconciliation([FromQuery] int? policyId)
+        => Ok((await birthdayVouchers.ReconciliationAsync(policyId)).Select(r => new
+        {
+            r.BirthdayPolicyId, r.PolicyCode, r.PolicyName, r.CardType, r.Issued, r.PointIssued, r.PointRemain
+        }));
+
+    // Kiểm tra một hội viên có đủ điều kiện nhận voucher sinh nhật (công khai).
+    [HttpPost("birthday-voucher/check")]
+    public async Task<IActionResult> CheckBirthdayVoucher([FromBody] BirthdayVoucherCheckReq r)
+    {
+        var o = await birthdayVouchers.CheckEligibilityAsync(r.MemberNo ?? "", r.CardType ?? "", r.DateOfBirth, r.At);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, point = o.point, expireDays = o.expireDays, cardType = o.cardType })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
+
+    // Phát voucher sinh nhật cho một hội viên theo chương trình đang hiệu lực (công khai).
+    [HttpPost("birthday-voucher/issue")]
+    public async Task<IActionResult> IssueBirthdayVoucher([FromBody] BirthdayVoucherIssueReq r)
+    {
+        var o = await birthdayVouchers.IssueAsync(r.MemberNo ?? "", r.CardNo ?? "", r.CardType ?? "", r.DateOfBirth, r.At);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, voucherNo = o.voucherNo, point = o.point, expireDate = o.expireDate, cardType = o.cardType })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
+
     // ---- Đợt phát hành voucher (port từ Mst_IssueVoucher) ----
     [HttpGet("issue-vouchers")]
     public async Task<IActionResult> IssueVouchers()
@@ -1353,6 +1402,8 @@ public class BirthdayPolicyReq { public string? Code { get; set; } public string
 public class BirthdayPolicyDtlReq { public string? CardType { get; set; } public decimal Point { get; set; } public string? Remark { get; set; } }
 public class BirthdayCheckReq { public string? MemberNo { get; set; } public string? CardType { get; set; } public DateTime? DateOfBirth { get; set; } public DateTime? At { get; set; } }
 public class BirthdayGrantReq { public string? MemberNo { get; set; } public string? CardNo { get; set; } public string? CardType { get; set; } public string? DealerCode { get; set; } public DateTime? DateOfBirth { get; set; } public DateTime? At { get; set; } }
+public class BirthdayVoucherCheckReq { public string? MemberNo { get; set; } public string? CardType { get; set; } public DateTime? DateOfBirth { get; set; } public DateTime? At { get; set; } }
+public class BirthdayVoucherIssueReq { public string? MemberNo { get; set; } public string? CardNo { get; set; } public string? CardType { get; set; } public DateTime? DateOfBirth { get; set; } public DateTime? At { get; set; } }
 public class IssueVoucherReq { public string? Code { get; set; } public string Name { get; set; } = ""; public DateTime EffDateStart { get; set; } public DateTime EffDateEnd { get; set; } public int QtyVoucher { get; set; } public int QtyDateUse { get; set; } public int FavorType { get; set; } public int IssueForm { get; set; } public string? Remark { get; set; } }
 public class IssueVoucherScopeReq { public int ScopeType { get; set; } public string? Value { get; set; } }
 public class IssueVoucherProductReq { public int RefType { get; set; } public string? RefCode { get; set; } public string? RefName { get; set; } }

@@ -1,0 +1,39 @@
+@model BirthdayVoucher
+@{ ViewData["Title"] = Model.VoucherNo; var (t, css) = Model.IsExpired ? ("Hết hạn", "dark") : (Model.IsUsable ? ("Khả dụng", "success") : ("Hết lượt/điểm", "warning")); }
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card mb-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h5 class="fw-bold mb-1">@Model.VoucherNo <span class="badge bg-@css ms-1">@t</span></h5>
+                    <div class="text-muted small">Hội viên <b>@Model.MemberNo</b> · hạng thẻ <b>@Model.CardTypeUse</b> · đại lý <b>@Model.DealerCode</b></div>
+                    @if (!string.IsNullOrEmpty(Model.Remark)) { <div class="small mt-1">@Model.Remark</div> }
+                </div>
+            </div>
+            <div class="row g-2 text-center mt-2">
+                <div class="col"><div class="text-muted small">Điểm voucher</div><div class="fw-bold">@Model.PointVCTotal.ToString("N0")</div></div>
+                <div class="col"><div class="text-muted small">Điểm còn lại</div><div class="fw-bold">@Model.PointVCRemain.ToString("N0")</div></div>
+                <div class="col"><div class="text-muted small">Hạn mức/lần</div><div class="fw-bold">@Model.PointVCLimit.ToString("N0")</div></div>
+                <div class="col"><div class="text-muted small">Lượt còn lại</div><div class="fw-bold">@Model.QtyUseVCRemain/@Model.QtyUseVCLimit</div></div>
+            </div>
+        </div></div>
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-2">Thông tin phát hành</h6>
+            <table class="table table-sm align-middle mb-0">
+                <tbody>
+                    <tr><td class="text-muted small">Số giao dịch (RefNo)</td><td class="fw-semibold small">@Model.RefNo</td></tr>
+                    <tr><td class="text-muted small">Số thẻ</td><td class="small">@Model.CardNo</td></tr>
+                    <tr><td class="text-muted small">Hạng thẻ gốc</td><td class="small">@Model.CardTypeInit</td></tr>
+                    <tr><td class="text-muted small">Ngày phát</td><td class="small">@Model.CreateDate.ToString("dd/MM/yyyy")</td></tr>
+                    <tr><td class="text-muted small">Hạn dùng điểm</td><td class="small">@Model.PointExpiryDate.ToString("dd/MM/yyyy")</td></tr>
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-2">Nguồn nghiệp vụ</h6>
+            <div class="small text-muted">Port từ <b>Crd_MemberVoucher</b> + <b>Crd_MemberVoucherTransaction</b> (logic <b>Crd_Member_PerformVCBirhday</b>, nâng cấp 20260518). Mã voucher theo pattern <b>BV.YYYY.{MemberNo}</b> đảm bảo mỗi hội viên 1 voucher/năm.</div>
+        </div></div>
+    </div>
+</div>

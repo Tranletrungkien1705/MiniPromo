@@ -131,13 +131,29 @@ public static class Seeder
             {
                 Code = "BIRTH2026", Name = "Tặng điểm sinh nhật 2026",
                 EffDateStart = DateTime.Today.AddDays(-3), EffDateEnd = DateTime.Today.AddMonths(2),
-                FlagPoint = true, ParamValue = 1_000, Status = BirthdayPolicyStatus.Active,
-                Remark = "Tặng điểm cho hội viên vào đúng ngày sinh, mỗi hội viên 1 lần/năm; điểm quy đổi ra tiền theo tỷ lệ."
+                FlagPoint = true, FlagVoucher = true, ParamValue = 1_000, Status = BirthdayPolicyStatus.Active,
+                Remark = "Tặng điểm cho hội viên vào đúng ngày sinh, mỗi hội viên 1 lần/năm; điểm quy đổi ra tiền theo tỷ lệ. Kèm phát voucher sinh nhật cho hạng GOLD/PLATINUM."
             };
             db.BirthdayPolicies.Add(bp); await db.SaveChangesAsync();
             db.BirthdayPolicyDtls.AddRange(
-                new BirthdayPolicyDtl { BirthdayPolicyId = bp.Id, CardType = "GOLD", Point = 500 },
-                new BirthdayPolicyDtl { BirthdayPolicyId = bp.Id, CardType = "PLATINUM", Point = 1_000 });
+                new BirthdayPolicyDtl { BirthdayPolicyId = bp.Id, CardType = "GOLD", Point = 500, VoucherValue = 500, VoucherExpireDays = 30 },
+                new BirthdayPolicyDtl { BirthdayPolicyId = bp.Id, CardType = "PLATINUM", Point = 1_000, VoucherValue = 1_000, VoucherExpireDays = 30 });
+            await db.SaveChangesAsync();
+        }
+
+        if (!await db.BirthdayVouchers.AnyAsync())
+        {
+            // Voucher sinh nhật mẫu — theo nguồn Crd_MemberVoucher (DealPointType = 'VOUCHERTSN').
+            var bp = await db.BirthdayPolicies.FirstAsync();
+            db.BirthdayVouchers.Add(new BirthdayVoucher
+            {
+                VoucherNo = $"BV.{DateTime.Today.Year}.HV001", RefNo = $"VCSN.{DateTime.Today:yyyyMMdd}.090000",
+                MemberNo = "HV001", CardNo = "CARD001", CardTypeUse = "GOLD", CardTypeInit = "GOLD",
+                DealerCode = "SUPPORT", BirthdayPolicyId = bp.Id,
+                PointVCTotal = 500, PointVCRemain = 500, PointVCLimit = 500, QtyUseVCLimit = 1, QtyUseVCRemain = 1,
+                PointExpiryDate = DateTime.Today.AddDays(30), CreateDate = DateTime.Today,
+                Remark = $"Voucher sinh nhật {DateTime.Today.Year} do đại lý SUPPORT phát hành."
+            });
             await db.SaveChangesAsync();
         }
 
@@ -295,7 +311,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "PromotionProductScopes", "CarRecommends", "CarRecommendDtls", "CardPromotionPrograms", "CardPromotionProgramDtls", "CardPromotionProgramSpecs", "CardPromotionUsages", "BirthdayPolicies", "BirthdayPolicyDtls", "BirthdayGrants", "IssueVouchers", "IssueVoucherDtls", "IssueVoucherScopes", "IssueVoucherProducts", "IssueVoucherPrices", "RankPolicies", "PolicyMoneyToPoints", "PolicyMoneyToPointDtls", "MemberDiscountTransactions", "PromotionMainTypeDefs", "PromotionPrmTypeDefs", "PromotionPrmInMains", "DiscountCodes", "DealerDiscountMaps", "VoucherIdSequences", "IntroductionGrants" };
+        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "PromotionProductScopes", "CarRecommends", "CarRecommendDtls", "CardPromotionPrograms", "CardPromotionProgramDtls", "CardPromotionProgramSpecs", "CardPromotionUsages", "BirthdayPolicies", "BirthdayPolicyDtls", "BirthdayGrants", "BirthdayVouchers", "IssueVouchers", "IssueVoucherDtls", "IssueVoucherScopes", "IssueVoucherProducts", "IssueVoucherPrices", "RankPolicies", "PolicyMoneyToPoints", "PolicyMoneyToPointDtls", "MemberDiscountTransactions", "PromotionMainTypeDefs", "PromotionPrmTypeDefs", "PromotionPrmInMains", "DiscountCodes", "DealerDiscountMaps", "VoucherIdSequences", "IntroductionGrants" };
         var sql = new List<string> {
             "CREATE TABLE IF NOT EXISTS minipromo.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON minipromo.\"Orgs\" (\"ApiKey\")" };

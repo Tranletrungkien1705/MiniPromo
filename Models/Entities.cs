@@ -433,6 +433,7 @@ public class BirthdayPolicy : IOrgOwned
     public DateTime EffDateStart { get; set; } = DateTime.Today;
     public DateTime EffDateEnd { get; set; } = DateTime.Today.AddMonths(1);
     public bool FlagPoint { get; set; } = true;             // Có tặng điểm sinh nhật
+    public bool FlagVoucher { get; set; }                   // Có phát voucher sinh nhật (nguồn Mst_BirthPolicy.FlagVoucher)
     public decimal ParamValue { get; set; } = 1;            // Tỷ lệ quy đổi điểm → tiền (UNITPOINTTOMONEY)
     public BirthdayPolicyStatus Status { get; set; } = BirthdayPolicyStatus.Inactive;
     public string? Remark { get; set; }
@@ -451,6 +452,8 @@ public class BirthdayPolicyDtl : IOrgOwned
     public BirthdayPolicy? BirthdayPolicy { get; set; }
     public string CardType { get; set; } = "";             // Loại thẻ áp dụng
     public decimal Point { get; set; }                      // Điểm tặng cho loại thẻ này
+    public decimal VoucherValue { get; set; }               // Tổng điểm voucher tặng (nguồn VoucherPointVCTotal); 0 = không phát voucher
+    public int VoucherExpireDays { get; set; }              // Số ngày voucher hiệu lực kể từ ngày sinh nhật (nguồn VoucherExpireDays)
     public string? Remark { get; set; }
 }
 
@@ -471,6 +474,44 @@ public class BirthdayGrant : IOrgOwned
     public decimal Amount { get; set; }                     // Số tiền quy đổi (Point × ParamValue)
     public DateTime GrantedAt { get; set; } = DateTime.UtcNow;
     public string? Remark { get; set; }
+}
+
+// Loại giao dịch điểm của nghiệp vụ phát voucher sinh nhật — theo nguồn DealPointType (Const.Main.cs).
+// VOUCHERTSN: phát voucher sinh nhật cho hội viên (khác với điểm BIRTHDAY).
+public enum BirthdayVoucherPointType { VoucherTSN = 0 }
+
+// Voucher sinh nhật — port từ Crd_MemberVoucher + Crd_MemberVoucherTransaction
+// (logic Crd_Member_PerformVCBirhday trong Transaction.Birthday.cs, nâng cấp 20260518).
+// Mỗi hội viên đủ điều kiện (sinh nhật hôm nay + hạng thẻ có cấu hình voucher) được phát
+// ĐÚNG 1 voucher/năm, do đại lý SUPPORT phát hành. Mã voucher theo pattern 'BV.YYYY.{MemberNo}'
+// đảm bảo idempotent (chạy lại job cùng năm sẽ bỏ qua). Điểm voucher có hạn dùng tới
+// ngày sinh + VoucherExpireDays. Nguồn: Mst_BirthPolicyDtl (VoucherValue/VoucherExpireDays).
+public class BirthdayVoucher : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string VoucherNo { get; set; } = "";            // Mã voucher 'BV.YYYY.{MemberNo}' (duy nhất)
+    public string RefNo { get; set; } = "";                // Số giao dịch audit 'VCSN.{yyyyMMdd.HHmmss}'
+    public string MemberNo { get; set; } = "";             // Mã hội viên
+    public string CardNo { get; set; } = "";               // Số thẻ
+    public string CardTypeUse { get; set; } = "";          // Hạng thẻ sử dụng
+    public string CardTypeInit { get; set; } = "";         // Hạng thẻ gốc của hội viên
+    public string DealerCode { get; set; } = "SUPPORT";    // Đại lý phát hành (hardcode SUPPORT)
+    public BirthdayVoucherPointType DealPointType { get; set; } = BirthdayVoucherPointType.VoucherTSN;
+    public int BirthdayPolicyId { get; set; }
+    public BirthdayPolicy? BirthdayPolicy { get; set; }
+    public decimal PointVCTotal { get; set; }               // Tổng điểm voucher tặng
+    public decimal PointVCRemain { get; set; }              // Điểm voucher còn lại
+    public decimal PointVCLimit { get; set; }               // Điểm tối đa dùng mỗi lần
+    public int QtyUseVCLimit { get; set; } = 1;             // Giới hạn số lần sử dụng
+    public int QtyUseVCRemain { get; set; } = 1;            // Số lần sử dụng còn lại
+    public DateTime PointExpiryDate { get; set; }           // Hạn dùng điểm voucher
+    public DateTime CreateDate { get; set; } = DateTime.Today;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public string? Remark { get; set; }
+
+    public bool IsExpired => DateTime.Today > PointExpiryDate;
+    public bool IsUsable => !IsExpired && PointVCRemain > 0 && QtyUseVCRemain > 0;
 }
 
 // Kiểu ưu đãi của đợt phát hành voucher — theo nguồn FavorType (Const.Main.cs).

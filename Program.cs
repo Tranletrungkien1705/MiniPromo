@@ -27,6 +27,7 @@ builder.Services.AddScoped<IPromotionProgramService, PromotionProgramService>();
 builder.Services.AddScoped<ICarRecommendService, CarRecommendService>();
 builder.Services.AddScoped<ICardPromotionProgramService, CardPromotionProgramService>();
 builder.Services.AddScoped<IBirthdayPolicyService, BirthdayPolicyService>();
+builder.Services.AddScoped<IBirthdayVoucherService, BirthdayVoucherService>();
 builder.Services.AddScoped<IIssueVoucherService, IssueVoucherService>();
 builder.Services.AddScoped<IParamPromotionService, ParamPromotionService>();
 builder.Services.AddScoped<IRankPolicyService, RankPolicyService>();
@@ -233,6 +234,20 @@ app.MapPost("/api/introduction/grant", async (IntroductionGrantDto dto, IIntrodu
     return Results.Ok(new { ok = r.ok, msg = r.msg, memberNo = r.memberNo, newMemberNo = r.newMemberNo, point = r.point, amount = r.amount, pointExpiryDTime = r.pointExpiryDTime });
 });
 
+// Kiểm tra một hội viên có đủ điều kiện nhận voucher sinh nhật (công khai).
+app.MapPost("/api/birthday-voucher/check", async (BirthdayVoucherCheckDto dto, IBirthdayVoucherService svc) =>
+{
+    var r = await svc.CheckEligibilityAsync(dto.MemberNo ?? "", dto.CardType ?? "", dto.DateOfBirth, dto.At);
+    return Results.Ok(new { ok = r.ok, msg = r.msg, point = r.point, expireDays = r.expireDays, cardType = r.cardType });
+});
+
+// Phát voucher sinh nhật cho một hội viên theo chương trình đang hiệu lực (công khai).
+app.MapPost("/api/birthday-voucher/issue", async (BirthdayVoucherIssueDto dto, IBirthdayVoucherService svc) =>
+{
+    var r = await svc.IssueAsync(dto.MemberNo ?? "", dto.CardNo ?? "", dto.CardType ?? "", dto.DateOfBirth, dto.At);
+    return Results.Ok(new { ok = r.ok, msg = r.msg, voucherNo = r.voucherNo, point = r.point, expireDate = r.expireDate, cardType = r.cardType });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -286,6 +301,8 @@ record CarRecommendCalcDto(string? DealerCode, string? ModelCode);
 record CardPromotionUseDto(string? DealNo, string? DealerCode, string? CardNo, string? CardType, int Qty);
 record BirthdayCheckDto(string? MemberNo, string? CardType, DateTime? DateOfBirth, DateTime? At);
 record BirthdayGrantDto(string? MemberNo, string? CardNo, string? CardType, string? DealerCode, DateTime? DateOfBirth, DateTime? At);
+record BirthdayVoucherCheckDto(string? MemberNo, string? CardType, DateTime? DateOfBirth, DateTime? At);
+record BirthdayVoucherIssueDto(string? MemberNo, string? CardNo, string? CardType, DateTime? DateOfBirth, DateTime? At);
 record IssueUseDto(string? VoucherNo, string? OrderNo, DateTime? At);
 record ParamWindowDto(string? ProgramCode, string? TypeCode, DateTime? Anchor);
 record RankEvalDto(string? CardType, decimal Point, int QtyVisit);

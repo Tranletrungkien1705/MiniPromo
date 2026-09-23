@@ -1738,6 +1738,150 @@ public class BirthdayPolicyServiceTests
         }
     }
 }
+
+/// <summary>Test voucher sinh nhật: chỉ phát khi chương trình bật + có cờ voucher, điều kiện ngày sinh,
+/// hạng thẻ có cấu hình voucher, mỗi hội viên 1 voucher/năm (idempotent theo mã BV.YYYY.MemberNo), đối soát.</summary>
+public class BirthdayVoucherServiceTests
+{
+    private static (AppDbContext db, IBirthdayVoucherService svc, SqliteConnection conn) NewSvc()
+    {
+        var conn = new SqliteConnection("DataSource=:memory:"); conn.Open();
+        var opt = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conn).Options;
+        var db = new AppDbContext(opt, new TenantContext { OrgId = TenantContext.DefaultOrgId });
+        db.Database.EnsureCreated();
+        return (db, new BirthdayVoucherService(db), conn);
+    }
+
+    // Chương trình đang bật, có phát voucher, hạng GOLD voucher 500 điểm hạn 30 ngày.
+    private static async Task<BirthdayPolicy> ActiveVoucherPolicy(IBirthdayPolicyService policySvc,
+        decimal voucherValue = 500, int expireDays = 30, string cardType = "GOLD")
+    {
+        var (_, _, id) = await policySvc.CreatePolicyAsync(new BirthdayPolicy
+        {
+            Code = "BIRTH" + Guid.NewGuid().ToString("N")[..6].ToUpper(), Name = "CT voucher test",
+            EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(30),
+            FlagPoint = true, FlagVoucher = true, ParamValue = 1_000
+        });
+        await policySvc.AddDetailAsync(new BirthdayPolicyDtl { BirthdayPolicyId = id, CardType = cardType, Point = 500, VoucherValue = voucherValue, VoucherExpireDays = expireDays });
+        await policySvc.SetStatusAsync(id, BirthdayPolicyStatus.Active);
+        return (await policySvc.GetPolicyAsync(id))!;
+    }
+
+    [Fact]
+    public async Task Check_NoActivePolicy_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var o = await svc.CheckEligibilityAsync("HV001", "GOLD", DateTime.Today, DateTime.Today);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Check_NotBirthday_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var policySvc = new BirthdayPolicyService(db);
+            await ActiveVoucherPolicy(policySvc);
+            var o = await svc.CheckEligibilityAsync("HV001", "GOLD", DateTime.Today.AddDays(1), DateTime.Today);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Check_CardTypeWithoutVoucher_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var policySvc = new BirthdayPolicyService(db);
+            await ActiveVoucherPolicy(policySvc, voucherValue: 0);   // hạng không cấu hình voucher
+            var o = await svc.CheckEligibilityAsync("HV001", "GOLD", DateTime.Today, DateTime.Today);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Check_Birthday_ReturnsPointAndExpireDays()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var policySvc = new BirthdayPolicyService(db);
+            await ActiveVoucherPolicy(policySvc, voucherValue: 500, expireDays: 30);
+            var o = await svc.CheckEligibilityAsync("HV001", "GOLD", DateTime.Today, DateTime.Today);
+            Assert.True(o.ok);
+            Assert.Equal(500, o.point);
+            Assert.Equal(30, o.expireDays);
+            Assert.Equal("GOLD", o.cardType);
+        }
+    }
+
+    [Fact]
+    public async Task Issue_CreatesVoucherWithSupportDealer()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var policySvc = new BirthdayPolicyService(db);
+            var p = await ActiveVoucherPolicy(policySvc, voucherValue: 500, expireDays: 30);
+            var o = await svc.IssueAsync("HV001", "CARD1", "GOLD", DateTime.Today, DateTime.Today);
+            Assert.True(o.ok);
+            Assert.Equal($"BV.{DateTime.Today.Year}.HV001", o.voucherNo);
+            Assert.Equal(500, o.point);
+            Assert.Equal(DateTime.Today.AddDays(30), o.expireDate);
+            var v = await db.BirthdayVouchers.FirstAsync();
+            Assert.Equal("SUPPORT", v.DealerCode);
+            Assert.Equal(p.Id, v.BirthdayPolicyId);
+            Assert.Equal(500, v.PointVCTotal);
+            Assert.Equal(500, v.PointVCRemain);
+            Assert.Equal(1, v.QtyUseVCLimit);
+        }
+    }
+
+    [Fact]
+    public async Task Issue_TwiceInYear_SecondRejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var policySvc = new BirthdayPolicyService(db);
+            await ActiveVoucherPolicy(policySvc);
+            Assert.True((await svc.IssueAsync("HV001", "CARD1", "GOLD", DateTime.Today, DateTime.Today)).ok);
+            var o2 = await svc.IssueAsync("HV001", "CARD1", "GOLD", DateTime.Today, DateTime.Today);
+            Assert.False(o2.ok);   // mỗi hội viên 1 voucher/năm
+            Assert.Equal(1, await db.BirthdayVouchers.CountAsync());
+        }
+    }
+
+    [Fact]
+    public async Task Issue_NotBirthday_Rejected_NoRecord()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var policySvc = new BirthdayPolicyService(db);
+            await ActiveVoucherPolicy(policySvc);
+            var o = await svc.IssueAsync("HV001", "CARD1", "GOLD", DateTime.Today.AddDays(1), DateTime.Today);
+            Assert.False(o.ok);
+            Assert.Equal(0, await db.BirthdayVouchers.CountAsync());
+        }
+    }
+
+    [Fact]
+    public async Task Reconciliation_ReportsIssuedByCardType()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var policySvc = new BirthdayPolicyService(db);
+            var p = await ActiveVoucherPolicy(policySvc, voucherValue: 500);
+            await svc.IssueAsync("HV001", "CARD1", "GOLD", DateTime.Today, DateTime.Today);
+            await svc.IssueAsync("HV002", "CARD2", "GOLD", DateTime.Today, DateTime.Today);
+            var rows = await svc.ReconciliationAsync(p.Id);
+            var row = Assert.Single(rows);
+            Assert.Equal("GOLD", row.CardType);
+            Assert.Equal(2, row.Issued);
+            Assert.Equal(1_000, row.PointIssued);
+            Assert.Equal(1_000, row.PointRemain);
+        }
+    }
+}
 /// <summary>Test đợt phát hành voucher: chỉ phát khi đợt hiệu lực, chặn vượt số lượng, chặn trùng mã,
 /// voucher hết hạn không dùng được, vòng đời Chưa phát → Đã phát → Đã dùng/Thu hồi/Huỷ, đối soát theo trạng thái.</summary>
 public class IssueVoucherServiceTests
