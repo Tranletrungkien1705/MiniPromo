@@ -485,3 +485,63 @@ public class CardPromotionProgramController(ICardPromotionProgramService svc) : 
         return View(await svc.ReconciliationAsync(programId));
     }
 }
+
+// Chương trình tặng điểm sinh nhật (port từ Mst_BirthPolicy).
+public class BirthdayPolicyController(IBirthdayPolicyService svc) : Controller
+{
+    public async Task<IActionResult> Index() => View(await svc.PoliciesAsync());
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string name, string? code, DateTime effDateStart, DateTime effDateEnd,
+        bool flagPoint, decimal paramValue, string? remark)
+    {
+        var (ok, msg, id) = await svc.CreatePolicyAsync(new BirthdayPolicy
+        {
+            Name = name ?? "", Code = (code ?? "").Trim().ToUpper(),
+            EffDateStart = effDateStart == default ? DateTime.Today : effDateStart,
+            EffDateEnd = effDateEnd == default ? DateTime.Today.AddMonths(1) : effDateEnd,
+            FlagPoint = flagPoint, ParamValue = paramValue <= 0 ? 1 : paramValue, Remark = remark
+        });
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Detail), new { id }) : RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var p = await svc.GetPolicyAsync(id);
+        if (p == null) return NotFound();
+        ViewBag.Recon = await svc.ReconciliationAsync(id);
+        return View(p);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddDetail(int id, string cardType, decimal point, string? remark)
+    {
+        var (ok, msg) = await svc.AddDetailAsync(new BirthdayPolicyDtl { BirthdayPolicyId = id, CardType = cardType ?? "", Point = point, Remark = remark });
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetStatus(int id, BirthdayPolicyStatus status)
+    {
+        var (ok, msg) = await svc.SetStatusAsync(id, status);
+        TempData[ok ? "Success" : "Error"] = msg; return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    // Tặng điểm sinh nhật cho một hội viên (port từ Crd_Member_PerformBirhday).
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Grant(string memberNo, string cardNo, string cardType, string dealerCode, DateTime? dateOfBirth, DateTime? at)
+    {
+        var o = await svc.GrantAsync(memberNo ?? "", cardNo ?? "", cardType ?? "", dealerCode ?? "", dateOfBirth, at);
+        TempData[o.ok ? "Success" : "Error"] = o.msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Đối soát điểm sinh nhật đã tặng theo chương trình + loại thẻ.
+    public async Task<IActionResult> Reconciliation(int? policyId)
+    {
+        ViewBag.PolicyId = policyId;
+        ViewBag.Policies = await svc.PoliciesAsync();
+        return View(await svc.ReconciliationAsync(policyId));
+    }
+}

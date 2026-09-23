@@ -12,7 +12,7 @@ namespace MiniPromo.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Produces("application/json")]
-public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, ICache cache, ITenantContext tenant) : ControllerBase
+public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, ICache cache, ITenantContext tenant) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard()
@@ -661,6 +661,85 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
         return o.ok ? Ok(new { ok = o.ok, msg = o.msg, qtyRemain = o.qtyRemain, qtyUsed = o.qtyUsed })
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
+
+    // ---- Chương trình tặng điểm sinh nhật (port từ Mst_BirthPolicy) ----
+    [HttpGet("birthday-policies")]
+    public async Task<IActionResult> BirthdayPolicies()
+        => Ok((await birthdayPolicies.PoliciesAsync()).Select(p => new
+        {
+            p.Id, p.Code, p.Name, p.EffDateStart, p.EffDateEnd, p.FlagPoint, p.ParamValue,
+            status = (int)p.Status, statusText = Ui.BirthdayPolicy(p.Status).text, statusCss = Ui.BirthdayPolicy(p.Status).css,
+            live = p.IsLiveNow, details = p.Details.Count
+        }));
+
+    [HttpGet("birthday-policies/{id:int}")]
+    public async Task<IActionResult> BirthdayPolicy(int id)
+    {
+        var p = await birthdayPolicies.GetPolicyAsync(id);
+        if (p == null) return NotFound(new { error = "Không tìm thấy chương trình." });
+        return Ok(new
+        {
+            p.Id, p.Code, p.Name, p.EffDateStart, p.EffDateEnd, p.FlagPoint, p.ParamValue, p.Remark,
+            status = (int)p.Status, statusText = Ui.BirthdayPolicy(p.Status).text, live = p.IsLiveNow,
+            details = p.Details.Select(d => new { d.Id, d.CardType, d.Point, d.Remark })
+        });
+    }
+
+    [HttpPost("birthday-policies")]
+    public async Task<IActionResult> CreateBirthdayPolicy([FromBody] BirthdayPolicyReq r)
+    {
+        var (ok, msg, id) = await birthdayPolicies.CreatePolicyAsync(new BirthdayPolicy
+        {
+            Code = r.Code ?? "", Name = r.Name,
+            EffDateStart = r.EffDateStart == default ? DateTime.Today : r.EffDateStart,
+            EffDateEnd = r.EffDateEnd == default ? DateTime.Today.AddMonths(1) : r.EffDateEnd,
+            FlagPoint = r.FlagPoint, ParamValue = r.ParamValue <= 0 ? 1 : r.ParamValue, Remark = r.Remark
+        });
+        return ok ? Ok(new { id }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("birthday-policies/{id:int}/details")]
+    public async Task<IActionResult> AddBirthdayPolicyDetail(int id, [FromBody] BirthdayPolicyDtlReq r)
+    {
+        var (ok, msg) = await birthdayPolicies.AddDetailAsync(new BirthdayPolicyDtl
+        {
+            BirthdayPolicyId = id, CardType = r.CardType ?? "", Point = r.Point, Remark = r.Remark
+        });
+        return ok ? Ok(new { ok }) : BadRequest(new { error = msg });
+    }
+
+    [HttpPost("birthday-policies/{id:int}/status")]
+    public async Task<IActionResult> SetBirthdayPolicyStatus(int id, [FromBody] StatusReq r)
+    {
+        var (ok, msg) = await birthdayPolicies.SetStatusAsync(id, (BirthdayPolicyStatus)r.Status);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, error = msg });
+    }
+
+    // Đối soát điểm sinh nhật đã tặng theo chương trình + loại thẻ.
+    [HttpGet("birthday-policies/reconciliation")]
+    public async Task<IActionResult> BirthdayReconciliation([FromQuery] int? policyId)
+        => Ok((await birthdayPolicies.ReconciliationAsync(policyId)).Select(r => new
+        {
+            r.BirthdayPolicyId, r.PolicyCode, r.PolicyName, r.CardType, r.Granted, r.PointGranted, r.AmountGranted
+        }));
+
+    // Kiểm tra một hội viên có đủ điều kiện nhận điểm sinh nhật (công khai).
+    [HttpPost("birthday-policy/check")]
+    public async Task<IActionResult> CheckBirthday([FromBody] BirthdayCheckReq r)
+    {
+        var o = await birthdayPolicies.CheckEligibilityAsync(r.MemberNo ?? "", r.CardType ?? "", r.DateOfBirth, r.At);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, point = o.point, amount = o.amount, cardType = o.cardType })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
+
+    // Tặng điểm sinh nhật cho một hội viên theo chương trình đang hiệu lực (công khai).
+    [HttpPost("birthday-policy/grant")]
+    public async Task<IActionResult> GrantBirthday([FromBody] BirthdayGrantReq r)
+    {
+        var o = await birthdayPolicies.GrantAsync(r.MemberNo ?? "", r.CardNo ?? "", r.CardType ?? "", r.DealerCode ?? "", r.DateOfBirth, r.At);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, point = o.point, amount = o.amount, cardType = o.cardType })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
 }
 
 public record DashDto(int Campaigns, int Running, int TotalPlays, int TotalWins, decimal ValueAwarded, List<TopDto> Top);
@@ -696,3 +775,7 @@ public class CardPromotionProgramReq { public string? Code { get; set; } public 
 public class CardPromotionProgramDtlReq { public string? CardType { get; set; } public int Qty { get; set; } public string? Unit { get; set; } public string? Remark { get; set; } }
 public class CardPromotionProgramSpecReq { public string? DealerCode { get; set; } }
 public class CardPromotionUseReq { public string? DealNo { get; set; } public string? DealerCode { get; set; } public string? CardNo { get; set; } public string? CardType { get; set; } public int Qty { get; set; } }
+public class BirthdayPolicyReq { public string? Code { get; set; } public string Name { get; set; } = ""; public DateTime EffDateStart { get; set; } public DateTime EffDateEnd { get; set; } public bool FlagPoint { get; set; } = true; public decimal ParamValue { get; set; } = 1; public string? Remark { get; set; } }
+public class BirthdayPolicyDtlReq { public string? CardType { get; set; } public decimal Point { get; set; } public string? Remark { get; set; } }
+public class BirthdayCheckReq { public string? MemberNo { get; set; } public string? CardType { get; set; } public DateTime? DateOfBirth { get; set; } public DateTime? At { get; set; } }
+public class BirthdayGrantReq { public string? MemberNo { get; set; } public string? CardNo { get; set; } public string? CardType { get; set; } public string? DealerCode { get; set; } public DateTime? DateOfBirth { get; set; } public DateTime? At { get; set; } }

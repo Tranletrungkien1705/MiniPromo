@@ -124,13 +124,29 @@ public static class Seeder
             db.CardPromotionProgramSpecs.Add(new CardPromotionProgramSpec { CardPromotionProgramId = cp.Id, DealerCode = "DLCP01" });
             await db.SaveChangesAsync();
         }
+
+        if (!await db.BirthdayPolicies.AnyAsync())
+        {
+            var bp = new BirthdayPolicy
+            {
+                Code = "BIRTH2026", Name = "Tặng điểm sinh nhật 2026",
+                EffDateStart = DateTime.Today.AddDays(-3), EffDateEnd = DateTime.Today.AddMonths(2),
+                FlagPoint = true, ParamValue = 1_000, Status = BirthdayPolicyStatus.Active,
+                Remark = "Tặng điểm cho hội viên vào đúng ngày sinh, mỗi hội viên 1 lần/năm; điểm quy đổi ra tiền theo tỷ lệ."
+            };
+            db.BirthdayPolicies.Add(bp); await db.SaveChangesAsync();
+            db.BirthdayPolicyDtls.AddRange(
+                new BirthdayPolicyDtl { BirthdayPolicyId = bp.Id, CardType = "GOLD", Point = 500 },
+                new BirthdayPolicyDtl { BirthdayPolicyId = bp.Id, CardType = "PLATINUM", Point = 1_000 });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "PromotionProductScopes", "CarRecommends", "CarRecommendDtls", "CardPromotionPrograms", "CardPromotionProgramDtls", "CardPromotionProgramSpecs", "CardPromotionUsages" };
+        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "PromotionProductScopes", "CarRecommends", "CarRecommendDtls", "CardPromotionPrograms", "CardPromotionProgramDtls", "CardPromotionProgramSpecs", "CardPromotionUsages", "BirthdayPolicies", "BirthdayPolicyDtls", "BirthdayGrants" };
         var sql = new List<string> {
             "CREATE TABLE IF NOT EXISTS minipromo.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON minipromo.\"Orgs\" (\"ApiKey\")" };

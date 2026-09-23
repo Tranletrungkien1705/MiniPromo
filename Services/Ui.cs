@@ -72,6 +72,13 @@ public static class Ui
         _ => (s.ToString(), "secondary")
     };
 
+    public static (string text, string css) BirthdayPolicy(BirthdayPolicyStatus s) => s switch
+    {
+        BirthdayPolicyStatus.Active   => ("Đang bật", "success"),
+        BirthdayPolicyStatus.Inactive => ("Tạm dừng", "secondary"),
+        _ => (s.ToString(), "secondary")
+    };
+
     public static string MainTypeText(PromotionMainType t) => t switch
     {
         PromotionMainType.Order           => "Đơn hàng",

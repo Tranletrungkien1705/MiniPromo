@@ -29,6 +29,9 @@ public class AppDbContext : DbContext
     public DbSet<CardPromotionProgramDtl> CardPromotionProgramDtls => Set<CardPromotionProgramDtl>();
     public DbSet<CardPromotionProgramSpec> CardPromotionProgramSpecs => Set<CardPromotionProgramSpec>();
     public DbSet<CardPromotionUsage> CardPromotionUsages => Set<CardPromotionUsage>();
+    public DbSet<BirthdayPolicy> BirthdayPolicies => Set<BirthdayPolicy>();
+    public DbSet<BirthdayPolicyDtl> BirthdayPolicyDtls => Set<BirthdayPolicyDtl>();
+    public DbSet<BirthdayGrant> BirthdayGrants => Set<BirthdayGrant>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -168,6 +171,26 @@ public class AppDbContext : DbContext
         b.Entity<CardPromotionUsage>(e =>
         {
             e.HasOne(x => x.CardPromotionProgram).WithMany().HasForeignKey(x => x.CardPromotionProgramId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<BirthdayPolicy>(e =>
+        {
+            e.HasIndex(x => x.Code).IsUnique();           // Mã chương trình sinh nhật — duy nhất
+            e.Property(x => x.ParamValue).HasPrecision(18, 2);
+            e.Ignore(x => x.IsLiveNow);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<BirthdayPolicyDtl>(e =>
+        {
+            e.Property(x => x.Point).HasPrecision(18, 2);
+            e.HasOne(x => x.BirthdayPolicy).WithMany(x => x.Details).HasForeignKey(x => x.BirthdayPolicyId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<BirthdayGrant>(e =>
+        {
+            e.Property(x => x.Point).HasPrecision(18, 2);
+            e.Property(x => x.Amount).HasPrecision(18, 2);
+            e.HasOne(x => x.BirthdayPolicy).WithMany().HasForeignKey(x => x.BirthdayPolicyId);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

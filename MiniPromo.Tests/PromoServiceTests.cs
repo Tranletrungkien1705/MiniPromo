@@ -1495,3 +1495,189 @@ public class CardPromotionProgramServiceTests
         }
     }
 }
+/// <summary>Test chương trình tặng điểm sinh nhật: vòng đời bật/tạm dừng, điều kiện ngày sinh, loại thẻ, 1 lần/năm, quy đổi điểm→tiền, đối soát.</summary>
+public class BirthdayPolicyServiceTests
+{
+    private static (AppDbContext db, IBirthdayPolicyService svc, SqliteConnection conn) NewSvc()
+    {
+        var conn = new SqliteConnection("DataSource=:memory:"); conn.Open();
+        var opt = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conn).Options;
+        var db = new AppDbContext(opt, new TenantContext { OrgId = TenantContext.DefaultOrgId });
+        db.Database.EnsureCreated();
+        return (db, new BirthdayPolicyService(db), conn);
+    }
+
+    // Chương trình đang bật, áp dụng tất cả, loại thẻ GOLD điểm 500, tỷ lệ quy đổi 1.000.
+    private static async Task<BirthdayPolicy> ActivePolicy(IBirthdayPolicyService svc,
+        decimal point = 500, decimal paramValue = 1_000, string cardType = "GOLD")
+    {
+        var (_, _, id) = await svc.CreatePolicyAsync(new BirthdayPolicy
+        {
+            Code = "BIRTH" + Guid.NewGuid().ToString("N")[..6].ToUpper(), Name = "CT test",
+            EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(30),
+            FlagPoint = true, ParamValue = paramValue
+        });
+        await svc.AddDetailAsync(new BirthdayPolicyDtl { BirthdayPolicyId = id, CardType = cardType, Point = point });
+        await svc.SetStatusAsync(id, BirthdayPolicyStatus.Active);
+        return (await svc.GetPolicyAsync(id))!;
+    }
+
+    [Fact]
+    public async Task Create_MissingName_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, _) = await svc.CreatePolicyAsync(new BirthdayPolicy { Name = "" });
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task Create_EndBeforeStart_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (ok, _, _) = await svc.CreatePolicyAsync(new BirthdayPolicy { Name = "X", EffDateStart = DateTime.Today, EffDateEnd = DateTime.Today.AddDays(-1) });
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task AddDetail_NonPositivePoint_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreatePolicyAsync(new BirthdayPolicy { Name = "X" });
+            var (ok, _) = await svc.AddDetailAsync(new BirthdayPolicyDtl { BirthdayPolicyId = id, CardType = "GOLD", Point = 0 });
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task AddDetail_DuplicateCardType_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreatePolicyAsync(new BirthdayPolicy { Name = "X" });
+            await svc.AddDetailAsync(new BirthdayPolicyDtl { BirthdayPolicyId = id, CardType = "GOLD", Point = 500 });
+            var (ok, _) = await svc.AddDetailAsync(new BirthdayPolicyDtl { BirthdayPolicyId = id, CardType = "GOLD", Point = 300 });
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task SetStatus_ActiveWithoutDetail_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var (_, _, id) = await svc.CreatePolicyAsync(new BirthdayPolicy { Name = "X" });
+            var (ok, _) = await svc.SetStatusAsync(id, BirthdayPolicyStatus.Active);
+            Assert.False(ok);
+        }
+    }
+
+    [Fact]
+    public async Task Check_NoActivePolicy_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var o = await svc.CheckEligibilityAsync("HV001", "GOLD", DateTime.Today, DateTime.Today);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Check_NotBirthday_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActivePolicy(svc);
+            var o = await svc.CheckEligibilityAsync("HV001", "GOLD", DateTime.Today.AddDays(1), DateTime.Today);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Check_UnknownCardType_Rejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActivePolicy(svc);
+            var o = await svc.CheckEligibilityAsync("HV001", "SILVER", DateTime.Today, DateTime.Today);
+            Assert.False(o.ok);
+        }
+    }
+
+    [Fact]
+    public async Task Check_Birthday_ReturnsPointAndAmount()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActivePolicy(svc, point: 500, paramValue: 1_000);
+            var o = await svc.CheckEligibilityAsync("HV001", "GOLD", DateTime.Today, DateTime.Today);
+            Assert.True(o.ok);
+            Assert.Equal(500, o.point);
+            Assert.Equal(500_000, o.amount);   // 500 × 1.000
+            Assert.Equal("GOLD", o.cardType);
+        }
+    }
+
+    [Fact]
+    public async Task Grant_CreatesGrantRecord()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var p = await ActivePolicy(svc, point: 500, paramValue: 1_000);
+            var o = await svc.GrantAsync("HV001", "CARD1", "GOLD", "DLCP01", DateTime.Today, DateTime.Today);
+            Assert.True(o.ok);
+            Assert.Equal(500, o.point);
+            Assert.Equal(500_000, o.amount);
+            var g = await db.BirthdayGrants.FirstAsync();
+            Assert.Equal("HV001", g.MemberNo);
+            Assert.Equal(p.Id, g.BirthdayPolicyId);
+            Assert.Equal(500_000, g.Amount);
+        }
+    }
+
+    [Fact]
+    public async Task Grant_TwiceInYear_SecondRejected()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActivePolicy(svc);
+            Assert.True((await svc.GrantAsync("HV001", "CARD1", "GOLD", "DLCP01", DateTime.Today, DateTime.Today)).ok);
+            var o2 = await svc.GrantAsync("HV001", "CARD1", "GOLD", "DLCP01", DateTime.Today, DateTime.Today);
+            Assert.False(o2.ok);   // mỗi hội viên 1 lần/năm
+            Assert.Equal(1, await db.BirthdayGrants.CountAsync());
+        }
+    }
+
+    [Fact]
+    public async Task Grant_NotBirthday_Rejected_NoRecord()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            await ActivePolicy(svc);
+            var o = await svc.GrantAsync("HV001", "CARD1", "GOLD", "DLCP01", DateTime.Today.AddDays(1), DateTime.Today);
+            Assert.False(o.ok);
+            Assert.Equal(0, await db.BirthdayGrants.CountAsync());
+        }
+    }
+
+    [Fact]
+    public async Task Reconciliation_ReportsGrantedByCardType()
+    {
+        var (db, svc, conn) = NewSvc(); using (conn)
+        {
+            var p = await ActivePolicy(svc, point: 500, paramValue: 1_000);
+            await svc.GrantAsync("HV001", "CARD1", "GOLD", "DLCP01", DateTime.Today, DateTime.Today);
+            await svc.GrantAsync("HV002", "CARD2", "GOLD", "DLCP01", DateTime.Today, DateTime.Today);
+            var rows = await svc.ReconciliationAsync(p.Id);
+            var row = Assert.Single(rows);
+            Assert.Equal("GOLD", row.CardType);
+            Assert.Equal(2, row.Granted);
+            Assert.Equal(1_000, row.PointGranted);
+            Assert.Equal(1_000_000, row.AmountGranted);
+        }
+    }
+}

@@ -1,0 +1,61 @@
+@model BirthdayPolicy
+@{ ViewData["Title"] = Model.Name; var (t, css) = Ui.BirthdayPolicy(Model.Status); var recon = (List<BirthdayReconRow>)ViewBag.Recon; }
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card mb-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h5 class="fw-bold mb-1">@Model.Name <span class="badge bg-@css ms-1">@t</span></h5>
+                    <div class="text-muted small">Mã <b>@Model.Code</b> · @Model.EffDateStart.ToString("dd/MM/yyyy") – @Model.EffDateEnd.ToString("dd/MM/yyyy")</div>
+                    @if (!string.IsNullOrEmpty(Model.Remark)) { <div class="small mt-1">@Model.Remark</div> }
+                </div>
+                <div class="text-end">
+                    @if (Model.Status == BirthdayPolicyStatus.Inactive) { <form asp-action="SetStatus" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="status" value="1" /><button class="btn btn-sm btn-success">Bật</button></form> }
+                    else { <form asp-action="SetStatus" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="status" value="0" /><button class="btn btn-sm btn-outline-dark">Tạm dừng</button></form> }
+                </div>
+            </div>
+            <div class="row g-2 text-center mt-2">
+                <div class="col"><div class="text-muted small">Tặng điểm</div><div class="fw-bold">@(Model.FlagPoint ? "Có" : "Không")</div></div>
+                <div class="col"><div class="text-muted small">Tỷ lệ điểm→tiền</div><div class="fw-bold">@Model.ParamValue.ToString("N0")</div></div>
+                <div class="col"><div class="text-muted small">Loại thẻ</div><div class="fw-bold">@Model.Details.Count</div></div>
+            </div>
+        </div></div>
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-2">Điểm tặng theo loại thẻ</h6>
+            <table class="table table-sm align-middle">
+                <thead><tr><th>Loại thẻ</th><th class="text-end">Điểm</th><th class="text-end">Quy đổi (đ)</th><th>Ghi chú</th></tr></thead>
+                <tbody>
+                @foreach (var d in Model.Details)
+                {
+                    <tr><td class="fw-semibold small">@d.CardType</td><td class="text-end">@d.Point.ToString("N0")</td><td class="text-end">@((d.Point * Model.ParamValue).ToString("N0"))</td><td class="small text-muted">@d.Remark</td></tr>
+                }
+                @if (Model.Details.Count == 0) { <tr><td colspan="4" class="text-center text-muted py-3">Chưa có dòng loại thẻ.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-2">Đối soát điểm đã tặng</h6>
+            <table class="table table-sm align-middle">
+                <thead><tr><th>Loại thẻ</th><th class="text-end">Lượt tặng</th><th class="text-end">Điểm đã tặng</th><th class="text-end">Tiền đã tặng</th></tr></thead>
+                <tbody>
+                @foreach (var r in recon)
+                {
+                    <tr><td class="fw-semibold small">@r.CardType</td><td class="text-end">@r.Granted</td><td class="text-end">@r.PointGranted.ToString("N0")</td><td class="text-end fw-bold" style="color:#db2777">@r.AmountGranted.ToString("N0")</td></tr>
+                }
+                @if (recon.Count == 0) { <tr><td colspan="4" class="text-center text-muted py-3">Chưa có dữ liệu.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3">Thêm dòng loại thẻ</h6>
+            <form asp-action="AddDetail" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                <div class="mb-2"><input name="cardType" class="form-control form-control-sm text-uppercase" placeholder="Loại thẻ *" required /></div>
+                <div class="mb-2"><input name="point" type="number" step="0.01" min="0" class="form-control form-control-sm" placeholder="Điểm tặng *" required /></div>
+                <div class="mb-3"><input name="remark" class="form-control form-control-sm" placeholder="Ghi chú" /></div>
+                <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Thêm loại thẻ</button>
+            </form>
+        </div></div>
+    </div>
+</div>

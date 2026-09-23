@@ -414,3 +414,59 @@ public class CardPromotionUsage : IOrgOwned
     public DateTime UsedAt { get; set; } = DateTime.UtcNow;
     public string? Remark { get; set; }
 }
+
+// Trạng thái chương trình tặng điểm sinh nhật — theo nguồn Mst_BirthPolicy.FlagActive.
+public enum BirthdayPolicyStatus { Inactive = 0, Active = 1 }
+
+// Chương trình tặng điểm sinh nhật — port từ Mst_BirthPolicy của hệ Loyalty.
+// Vòng đời: Tạm dừng ↔ Đang bật (FlagActive). Điều kiện áp dụng: trong khoảng EffDateStart..EffDateEnd,
+// cờ FlagPoint (chỉ tặng điểm), và mỗi loại thẻ (CardType) có mức điểm riêng ở BirthdayPolicyDtl.
+// Điểm được quy đổi ra tiền theo tỷ lệ ParamValue (nguồn Mst_ParamSys.UNITPOINTTOMONEY).
+public class BirthdayPolicy : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";                 // BirthPolicyNo
+    public string Name { get; set; } = "";                 // BirthPolicyName
+    public DateTime EffDateStart { get; set; } = DateTime.Today;
+    public DateTime EffDateEnd { get; set; } = DateTime.Today.AddMonths(1);
+    public bool FlagPoint { get; set; } = true;             // Có tặng điểm sinh nhật
+    public decimal ParamValue { get; set; } = 1;            // Tỷ lệ quy đổi điểm → tiền (UNITPOINTTOMONEY)
+    public BirthdayPolicyStatus Status { get; set; } = BirthdayPolicyStatus.Inactive;
+    public string? Remark { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public List<BirthdayPolicyDtl> Details { get; set; } = new();
+
+    public bool IsLiveNow => Status == BirthdayPolicyStatus.Active && DateTime.Today >= EffDateStart.Date && DateTime.Today <= EffDateEnd.Date;
+}
+
+// Dòng chi tiết theo loại thẻ — port từ Mst_BirthPolicyDtl.
+public class BirthdayPolicyDtl : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int BirthdayPolicyId { get; set; }
+    public BirthdayPolicy? BirthdayPolicy { get; set; }
+    public string CardType { get; set; } = "";             // Loại thẻ áp dụng
+    public decimal Point { get; set; }                      // Điểm tặng cho loại thẻ này
+    public string? Remark { get; set; }
+}
+
+// Nhật ký tặng điểm sinh nhật — port từ Crd_CardTransaction (DealPointType = 'BIRTHDAY').
+// Mỗi lần tặng ghi nhận điểm đã tặng (Point) và số tiền quy đổi (Amount) cho một hội viên/thẻ.
+// Ràng buộc: mỗi hội viên chỉ được tặng 1 lần trong một năm.
+public class BirthdayGrant : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string MemberNo { get; set; } = "";             // Mã hội viên
+    public string CardNo { get; set; } = "";               // Số thẻ
+    public string CardType { get; set; } = "";             // Loại thẻ dùng để tính điểm
+    public string DealerCode { get; set; } = "";           // Đại lý được tặng điểm
+    public int BirthdayPolicyId { get; set; }
+    public BirthdayPolicy? BirthdayPolicy { get; set; }
+    public decimal Point { get; set; }                      // Điểm đã tặng
+    public decimal Amount { get; set; }                     // Số tiền quy đổi (Point × ParamValue)
+    public DateTime GrantedAt { get; set; } = DateTime.UtcNow;
+    public string? Remark { get; set; }
+}

@@ -26,6 +26,7 @@ builder.Services.AddScoped<ICarPromotionService, CarPromotionService>();
 builder.Services.AddScoped<IPromotionProgramService, PromotionProgramService>();
 builder.Services.AddScoped<ICarRecommendService, CarRecommendService>();
 builder.Services.AddScoped<ICardPromotionProgramService, CardPromotionProgramService>();
+builder.Services.AddScoped<IBirthdayPolicyService, BirthdayPolicyService>();
 builder.Services.AddFleetObs();
 builder.Services.AddControllersWithViews();
 
@@ -114,6 +115,20 @@ app.MapPost("/api/card-promotion/use", async (CardPromotionUseDto dto, ICardProm
     return Results.Ok(new { ok = r.ok, msg = r.msg, qtyRemain = r.qtyRemain, qtyUsed = r.qtyUsed });
 });
 
+// Kiểm tra một hội viên có đủ điều kiện nhận điểm sinh nhật (công khai).
+app.MapPost("/api/birthday-policy/check", async (BirthdayCheckDto dto, IBirthdayPolicyService svc) =>
+{
+    var r = await svc.CheckEligibilityAsync(dto.MemberNo ?? "", dto.CardType ?? "", dto.DateOfBirth, dto.At);
+    return Results.Ok(new { ok = r.ok, msg = r.msg, point = r.point, amount = r.amount, cardType = r.cardType });
+});
+
+// Tặng điểm sinh nhật cho một hội viên theo chương trình đang hiệu lực (công khai).
+app.MapPost("/api/birthday-policy/grant", async (BirthdayGrantDto dto, IBirthdayPolicyService svc) =>
+{
+    var r = await svc.GrantAsync(dto.MemberNo ?? "", dto.CardNo ?? "", dto.CardType ?? "", dto.DealerCode ?? "", dto.DateOfBirth, dto.At);
+    return Results.Ok(new { ok = r.ok, msg = r.msg, point = r.point, amount = r.amount, cardType = r.cardType });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -165,6 +180,8 @@ record CarPromoCalcDto(string? DealerCode, string? ModelCode);
 record PromotionCalcDto(decimal OrderAmount, int Qty, DateTime? At);
 record CarRecommendCalcDto(string? DealerCode, string? ModelCode);
 record CardPromotionUseDto(string? DealNo, string? DealerCode, string? CardNo, string? CardType, int Qty);
+record BirthdayCheckDto(string? MemberNo, string? CardType, DateTime? DateOfBirth, DateTime? At);
+record BirthdayGrantDto(string? MemberNo, string? CardNo, string? CardType, string? DealerCode, DateTime? DateOfBirth, DateTime? At);
 record RegisterOrgDto(string Name);
 record ImportCampaignDto(string? Code, string? Name, string? Description, DateTime? FromDate, DateTime? ToDate, int? Status, int LoseWeight, List<ImportPrizeDto>? Prizes, List<ImportEntryDto>? Entries);
 record ImportPrizeDto(string? Name, string? Tier, decimal Value, int Quantity, int Weight);

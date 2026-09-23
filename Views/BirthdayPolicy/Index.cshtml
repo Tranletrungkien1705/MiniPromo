@@ -1,0 +1,58 @@
+@model List<BirthdayPolicy>
+@{ ViewData["Title"] = "Điểm sinh nhật"; }
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="fw-bold mb-0">Chương trình tặng điểm sinh nhật</h5>
+    <a href="/BirthdayPolicy/Reconciliation" class="btn btn-sm btn-outline-primary"><i class="bi bi-clipboard-check me-1"></i>Đối soát</a>
+</div>
+<div class="row g-3">
+    <div class="col-lg-8"><div class="card"><div class="card-body">
+        <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>Mã</th><th>Tên</th><th>Hiệu lực</th><th class="text-center">Loại thẻ</th><th class="text-end">Tỷ lệ điểm→tiền</th><th>Trạng thái</th></tr></thead>
+            <tbody>
+            @foreach (var p in Model)
+            {
+                var (t, css) = Ui.BirthdayPolicy(p.Status);
+                <tr style="cursor:pointer" onclick="location.href='/BirthdayPolicy/Detail/@p.Id'">
+                    <td class="fw-semibold small">@p.Code</td><td>@p.Name</td>
+                    <td class="small text-muted">@p.EffDateStart.ToString("dd/MM") – @p.EffDateEnd.ToString("dd/MM/yy")</td>
+                    <td class="text-center">@p.Details.Count</td>
+                    <td class="text-end small">@p.ParamValue.ToString("N0")</td>
+                    <td><span class="badge bg-@css">@t</span></td>
+                </tr>
+            }
+            @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Chưa có chương trình.</td></tr> }
+            </tbody>
+        </table>
+    </div></div></div>
+    <div class="col-lg-4">
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3">Tạo chương trình</h6>
+            <form asp-action="Create" method="post">@Html.AntiForgeryToken()
+                <div class="mb-2"><input name="name" class="form-control" placeholder="Tên chương trình *" required /></div>
+                <div class="mb-2"><input name="code" class="form-control text-uppercase" placeholder="Mã (tự sinh)" /></div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><label class="form-label small text-muted">Hiệu lực từ</label><input name="effDateStart" type="date" value="@DateTime.Today.ToString("yyyy-MM-dd")" class="form-control form-control-sm" /></div>
+                    <div class="col-6"><label class="form-label small text-muted">Đến</label><input name="effDateEnd" type="date" value="@DateTime.Today.AddMonths(1).ToString("yyyy-MM-dd")" class="form-control form-control-sm" /></div>
+                </div>
+                <div class="mb-2"><label class="form-label small text-muted">Tỷ lệ quy đổi điểm → tiền (UNITPOINTTOMONEY)</label><input name="paramValue" type="number" step="0.01" value="1" class="form-control form-control-sm" /></div>
+                <div class="form-check mb-2"><input name="flagPoint" type="checkbox" value="true" class="form-check-input" id="flagPoint" checked /><label class="form-check-label small" for="flagPoint">Có tặng điểm sinh nhật</label></div>
+                <div class="mb-3"><textarea name="remark" class="form-control form-control-sm" rows="2" placeholder="Ghi chú"></textarea></div>
+                <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Tạo</button>
+            </form>
+        </div></div>
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-3">Tặng điểm sinh nhật</h6>
+            <form asp-action="Grant" method="post">@Html.AntiForgeryToken()
+                <div class="mb-2"><input name="memberNo" class="form-control form-control-sm" placeholder="Mã hội viên *" required /></div>
+                <div class="mb-2"><input name="cardNo" class="form-control form-control-sm" placeholder="Số thẻ" /></div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><input name="cardType" class="form-control form-control-sm text-uppercase" placeholder="Loại thẻ *" required /></div>
+                    <div class="col-6"><input name="dealerCode" class="form-control form-control-sm text-uppercase" placeholder="Mã đại lý" /></div>
+                </div>
+                <div class="mb-2"><label class="form-label small text-muted">Ngày sinh hội viên</label><input name="dateOfBirth" type="date" class="form-control form-control-sm" required /></div>
+                <div class="mb-3"><label class="form-label small text-muted">Ngày xét (mặc định hôm nay)</label><input name="at" type="date" class="form-control form-control-sm" /></div>
+                <button class="btn btn-outline-primary w-100"><i class="bi bi-gift me-1"></i>Tặng điểm</button>
+            </form>
+        </div></div>
+    </div>
+</div>
