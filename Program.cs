@@ -38,6 +38,7 @@ builder.Services.AddScoped<IDiscountCodeService, DiscountCodeService>();
 builder.Services.AddScoped<IVoucherIdService, VoucherIdService>();
 builder.Services.AddScoped<IIntroductionGrantService, IntroductionGrantService>();
 builder.Services.AddScoped<ICarPurchasePointService, CarPurchasePointService>();
+builder.Services.AddScoped<IKmbhGrantService, KmbhGrantService>();
 builder.Services.AddScoped<IPolicyExpenseTypeService, PolicyExpenseTypeService>();
 builder.Services.AddFleetObs();
 builder.Services.AddControllersWithViews();
@@ -272,6 +273,14 @@ app.MapPost("/api/car-purchase-point/grant", async (CarPurchasePointGrantDto dto
     return Results.Ok(new { ok = r.ok, msg = r.msg, memberNo = r.memberNo, cardNo = r.cardNo, point = r.point, amount = r.amount, pointExpiryDTime = r.pointExpiryDTime });
 });
 
+// Tặng điểm khuyến mại bán hàng (HTV) cho một hội viên (công khai).
+app.MapPost("/api/kmbh/grant", async (KmbhGrantDto dto, IKmbhGrantService svc) =>
+{
+    var r = await svc.GrantAsync(dto.MemberNo ?? "", dto.CardNo ?? "", dto.CardTypeUse ?? "", dto.CardTypeInit ?? "",
+        dto.PointBuyCreta, dto.ParamValue, dto.At);
+    return Results.Ok(new { ok = r.ok, msg = r.msg, memberNo = r.memberNo, cardNo = r.cardNo, point = r.point, amount = r.amount, pointExpiryDTime = r.pointExpiryDTime });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -341,6 +350,7 @@ record VoucherIdGenDto(int Amount, DateTime? At);
 record VoucherIdValidateDto(string? VoucherNo);
 record IntroductionGrantDto(string? NewMemberNo, string? ReferrerMemberNo, string? CardNo, string? CardTypeUse, string? CardTypeInit, string? DealerCode, decimal PointIntro, decimal ParamValue, DateTime? At);
 record CarPurchasePointGrantDto(string? MemberNo, string? CardNo, string? CardTypeUse, string? CardTypeInit, string? DealerCode, string? PrProgramCode, decimal PointBuyCar, decimal ParamValue, DateTime? At);
+record KmbhGrantDto(string? MemberNo, string? CardNo, string? CardTypeUse, string? CardTypeInit, decimal PointBuyCreta, decimal ParamValue, DateTime? At);
 record ExpensePointCalcDto(string? ExpenseType, decimal Amount);
 record RegisterOrgDto(string Name);
 record ImportCampaignDto(string? Code, string? Name, string? Description, DateTime? FromDate, DateTime? ToDate, int? Status, int LoseWeight, List<ImportPrizeDto>? Prizes, List<ImportEntryDto>? Entries);

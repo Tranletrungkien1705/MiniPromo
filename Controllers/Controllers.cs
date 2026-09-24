@@ -1040,6 +1040,34 @@ public class CarPurchasePointController(ICarPurchasePointService svc) : Controll
     }
 }
 
+// Tặng điểm khuyến mại bán hàng (HTV) (port từ Crd_Member_PerformBuyCretaX).
+public class KmbhGrantController(IKmbhGrantService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? memberNo)
+    {
+        ViewBag.MemberNo = memberNo;
+        return View(await svc.GrantsAsync(memberNo));
+    }
+
+    // Tặng điểm khuyến mại bán hàng (HTV) cho một hội viên.
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Grant(string memberNo, string? cardNo, string? cardTypeUse, string? cardTypeInit,
+        decimal pointBuyCreta, decimal paramValue, DateTime? at)
+    {
+        var o = await svc.GrantAsync(memberNo ?? "", cardNo ?? "", cardTypeUse ?? "", cardTypeInit ?? "",
+            pointBuyCreta, paramValue, at);
+        TempData[o.ok ? "Success" : "Error"] = o.msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Đối soát điểm khuyến mại bán hàng đã tặng theo hội viên.
+    public async Task<IActionResult> Reconciliation(string? memberNo)
+    {
+        ViewBag.MemberNo = memberNo;
+        return View(await svc.ReconciliationAsync(memberNo));
+    }
+}
+
 // Chính sách đối tượng tích điểm dịch vụ (port từ Mst_PolicyExpenseType + Mst_ExpenseType).
 public class PolicyExpenseTypeController(IPolicyExpenseTypeService svc) : Controller
 {

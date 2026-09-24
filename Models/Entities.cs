@@ -869,6 +869,36 @@ public class CarPurchasePointGrant : IOrgOwned
     public string? Remark { get; set; }
 }
 
+// Loại giao dịch điểm của nghiệp vụ tặng điểm khuyến mại bán hàng (HTV) — theo nguồn DealPointType (Const.Main.cs).
+// KMBH: HTV (nhà sản xuất) tặng thêm điểm cho hội viên mua xe trong chương trình khuyến mại đặc biệt.
+public enum KmbhPointType { Kmbh = 0 }
+
+// Nhật ký tặng điểm khuyến mại bán hàng (HTV) — port từ Crd_Member_PerformBuyCretaX
+// (Transaction.AddPoint.cs) + bảng Crd_CardTransaction (DealPointType = 'KMBH').
+// Khi hội viên mua xe trong chương trình khuyến mại của HTV, hệ thống cộng số điểm khuyến mại
+// (PointBuyCreta trên Crd_Member) vào thẻ đang APPROVE của hội viên, quy đổi ra tiền theo tỷ lệ
+// UNITPOINTTOMONEY (Mst_ParamSys). Điểm có hạn dùng tới cuối tháng 12 năm kế tiếp (PointExpiryDTime).
+// Đại lý ghi nhận là 'HTV' (điểm từ nhà sản xuất, không phải từ đại lý).
+public class KmbhGrant : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string RefNo { get; set; } = "";                // Số giao dịch (KMBH.yyyyMMdd.HHmmss)
+    public string MemberNo { get; set; } = "";             // Mã hội viên
+    public string CardNo { get; set; } = "";               // Số thẻ (thẻ APPROVE của hội viên)
+    public string CardTypeUse { get; set; } = "";          // Hạng thẻ sử dụng
+    public string CardTypeInit { get; set; } = "";         // Hạng thẻ gốc của hội viên
+    public string DealerCode { get; set; } = "HTV";        // DLCode — đại lý ghi nhận (nguồn hardcode 'HTV')
+    public KmbhPointType DealPointType { get; set; } = KmbhPointType.Kmbh;
+    public decimal PointChTotal { get; set; }              // Điểm khuyến mại đã tặng (PointBuyCreta)
+    public decimal AmountChTotal { get; set; }             // Số tiền quy đổi (PointChTotal × ParamValue)
+    public decimal ParamValue { get; set; } = 1;           // Tỷ lệ quy đổi điểm → tiền (UNITPOINTTOMONEY)
+    public DateTime PointExpiryDTime { get; set; }         // Hạn dùng điểm (cuối tháng 12 năm kế tiếp)
+    public DateTime CreateDate { get; set; } = DateTime.Today;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public string? Remark { get; set; }
+}
+
 // Loại giao dịch điểm của nghiệp vụ tặng điểm giới thiệu — theo nguồn DealPointType (Const.Main.cs).
 // INTRODUCTION: tặng điểm cho hội viên đã giới thiệu một hội viên mới mua xe.
 public enum IntroductionPointType { Introduction = 0 }

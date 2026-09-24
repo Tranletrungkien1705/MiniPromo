@@ -321,6 +321,21 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        if (!await db.KmbhGrants.AnyAsync())
+        {
+            // Nhật ký tặng điểm khuyến mại bán hàng (HTV) mẫu — theo nguồn Crd_Member_PerformBuyCretaX (DealPointType = 'KMBH').
+            db.KmbhGrants.Add(new KmbhGrant
+            {
+                RefNo = "KMBH.20260924.090000", MemberNo = "HV001", CardNo = "CARD001",
+                CardTypeUse = "GOLD", CardTypeInit = "SILVER", DealerCode = "HTV",
+                DealPointType = KmbhPointType.Kmbh,
+                PointChTotal = 3_000_000, AmountChTotal = 3_000_000_000, ParamValue = 1_000,
+                PointExpiryDTime = new DateTime(DateTime.Today.Year + 1, 12, 31, 23, 59, 59),
+                CreateDate = DateTime.Today, Remark = "HTV tặng điểm khuyến mại bán hàng cho hội viên HV001 (đặc cách hạng GOLD)."
+            });
+            await db.SaveChangesAsync();
+        }
+
         if (!await db.ExpenseTypes.AnyAsync())
         {
             // Danh mục loại chi phí mẫu — theo nguồn Mst_ExpenseType.
@@ -356,7 +371,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "PromotionProductScopes", "CarRecommends", "CarRecommendDtls", "CardPromotionPrograms", "CardPromotionProgramDtls", "CardPromotionProgramSpecs", "CardPromotionUsages", "BirthdayPolicies", "BirthdayPolicyDtls", "BirthdayGrants", "BirthdayVouchers", "IssueVouchers", "IssueVoucherDtls", "IssueVoucherScopes", "IssueVoucherProducts", "IssueVoucherPrices", "RankPolicies", "PolicyMoneyToPoints", "PolicyMoneyToPointDtls", "MemberDiscountTransactions", "PromotionMainTypeDefs", "PromotionPrmTypeDefs", "PromotionPrmInMains", "DiscountCodes", "DealerDiscountMaps", "VoucherIdSequences", "IntroductionGrants", "CarPurchasePointGrants", "ExpenseTypes", "PolicyExpenseTypes" };
+        var tables = new[] { "Campaigns", "Prizes", "Entries", "Vouchers", "VoucherRedemptions", "VoucherPrograms", "VoucherProgramDtls", "CarPromotions", "CarPromotionDtls", "PromotionPrograms", "PromotionScopes", "PromotionPrms", "PromotionMains", "PromotionProductScopes", "CarRecommends", "CarRecommendDtls", "CardPromotionPrograms", "CardPromotionProgramDtls", "CardPromotionProgramSpecs", "CardPromotionUsages", "BirthdayPolicies", "BirthdayPolicyDtls", "BirthdayGrants", "BirthdayVouchers", "IssueVouchers", "IssueVoucherDtls", "IssueVoucherScopes", "IssueVoucherProducts", "IssueVoucherPrices", "RankPolicies", "PolicyMoneyToPoints", "PolicyMoneyToPointDtls", "MemberDiscountTransactions", "PromotionMainTypeDefs", "PromotionPrmTypeDefs", "PromotionPrmInMains", "DiscountCodes", "DealerDiscountMaps", "VoucherIdSequences", "IntroductionGrants", "CarPurchasePointGrants", "KmbhGrants", "ExpenseTypes", "PolicyExpenseTypes" };
         var sql = new List<string> {
             "CREATE TABLE IF NOT EXISTS minipromo.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON minipromo.\"Orgs\" (\"ApiKey\")" };

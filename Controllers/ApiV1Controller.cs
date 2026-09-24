@@ -12,7 +12,7 @@ namespace MiniPromo.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Produces("application/json")]
-public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IBirthdayVoucherService birthdayVouchers, IIssueVoucherService issueVouchers, IParamPromotionService paramPromotions, IRankPolicyService rankPolicies, IPolicyMoneyToPointService moneyToPoints, IMemberDiscountService memberDiscounts, IPromotionTypeService promotionTypes, IDiscountCodeService discountCodes, IVoucherIdService voucherIds, IIntroductionGrantService introductionGrants, ICarPurchasePointService carPurchasePoints, IPolicyExpenseTypeService policyExpenseTypes, ICache cache, ITenantContext tenant) : ControllerBase
+public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVoucherProgramService programs, ICarPromotionService carPromos, IPromotionProgramService promotions, ICarRecommendService carRecommends, ICardPromotionProgramService cardPrograms, IBirthdayPolicyService birthdayPolicies, IBirthdayVoucherService birthdayVouchers, IIssueVoucherService issueVouchers, IParamPromotionService paramPromotions, IRankPolicyService rankPolicies, IPolicyMoneyToPointService moneyToPoints, IMemberDiscountService memberDiscounts, IPromotionTypeService promotionTypes, IDiscountCodeService discountCodes, IVoucherIdService voucherIds, IIntroductionGrantService introductionGrants, ICarPurchasePointService carPurchasePoints, IKmbhGrantService kmbhGrants, IPolicyExpenseTypeService policyExpenseTypes, ICache cache, ITenantContext tenant) : ControllerBase
 {
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard()
@@ -1400,6 +1400,33 @@ public class ApiV1Controller(IPromoService svc, IVoucherService vouchers, IVouch
                     : BadRequest(new { ok = o.ok, error = o.msg });
     }
 
+    // ---- Tặng điểm khuyến mại bán hàng (HTV) (port từ Crd_Member_PerformBuyCretaX) ----
+    [HttpGet("kmbh-grants")]
+    public async Task<IActionResult> KmbhGrants([FromQuery] string? memberNo)
+        => Ok((await kmbhGrants.GrantsAsync(memberNo)).Select(g => new
+        {
+            g.Id, g.RefNo, g.MemberNo, g.CardNo, g.CardTypeUse, g.CardTypeInit, g.DealerCode,
+            dealPointType = (int)g.DealPointType, g.PointChTotal, g.AmountChTotal, g.ParamValue, g.PointExpiryDTime, g.CreateDate, g.Remark
+        }));
+
+    // Đối soát điểm khuyến mại bán hàng đã tặng theo hội viên.
+    [HttpGet("kmbh-grants/reconciliation")]
+    public async Task<IActionResult> KmbhReconciliation([FromQuery] string? memberNo)
+        => Ok((await kmbhGrants.ReconciliationAsync(memberNo)).Select(r => new
+        {
+            r.MemberNo, r.Granted, r.PointGranted, r.AmountGranted
+        }));
+
+    // Tặng điểm khuyến mại bán hàng (HTV) cho một hội viên (công khai).
+    [HttpPost("kmbh/grant")]
+    public async Task<IActionResult> GrantKmbh([FromBody] KmbhGrantReq r)
+    {
+        var o = await kmbhGrants.GrantAsync(r.MemberNo ?? "", r.CardNo ?? "", r.CardTypeUse ?? "", r.CardTypeInit ?? "",
+            r.PointBuyCreta, r.ParamValue, r.At);
+        return o.ok ? Ok(new { ok = o.ok, msg = o.msg, memberNo = o.memberNo, cardNo = o.cardNo, point = o.point, amount = o.amount, pointExpiryDTime = o.pointExpiryDTime })
+                    : BadRequest(new { ok = o.ok, error = o.msg });
+    }
+
     // ---- Chính sách đối tượng tích điểm dịch vụ (port từ Mst_PolicyExpenseType + Mst_ExpenseType) ----
     [HttpGet("expense-types")]
     public async Task<IActionResult> ExpenseTypes()
@@ -1515,6 +1542,7 @@ public class VoucherIdGenReq { public int Amount { get; set; } = 1; public DateT
 public class VoucherIdValidateReq { public string? VoucherNo { get; set; } }
 public class IntroductionGrantReq { public string? NewMemberNo { get; set; } public string? ReferrerMemberNo { get; set; } public string? CardNo { get; set; } public string? CardTypeUse { get; set; } public string? CardTypeInit { get; set; } public string? DealerCode { get; set; } public decimal PointIntro { get; set; } public decimal ParamValue { get; set; } = 1; public DateTime? At { get; set; } }
 public class CarPurchasePointReq { public string? MemberNo { get; set; } public string? CardNo { get; set; } public string? CardTypeUse { get; set; } public string? CardTypeInit { get; set; } public string? DealerCode { get; set; } public string? PrProgramCode { get; set; } public decimal PointBuyCar { get; set; } public decimal ParamValue { get; set; } = 1; public DateTime? At { get; set; } }
+public class KmbhGrantReq { public string? MemberNo { get; set; } public string? CardNo { get; set; } public string? CardTypeUse { get; set; } public string? CardTypeInit { get; set; } public decimal PointBuyCreta { get; set; } public decimal ParamValue { get; set; } = 1; public DateTime? At { get; set; } }
 public class RankPolicyReq { public string? Code { get; set; } public string? CardType { get; set; } public int Value { get; set; } public decimal PointUpBegin { get; set; } public decimal PointUpEnd { get; set; } public int QtyVisitUpBegin { get; set; } public int QtyVisitUpEnd { get; set; } public decimal PointKeepBegin { get; set; } public decimal PointKeepEnd { get; set; } public int QtyVisitKeepBegin { get; set; } public int QtyVisitKeepEnd { get; set; } public int QtyMonth { get; set; } = 12; public string? Remark { get; set; } }
 public class RankEvalReq { public string? CardType { get; set; } public decimal Point { get; set; } public int QtyVisit { get; set; } }
 public class PolicyMoneyToPointReq { public string? Code { get; set; } public string Name { get; set; } = ""; public DateTime EffDateStart { get; set; } public DateTime EffDateEnd { get; set; } public string? Remark { get; set; } }
